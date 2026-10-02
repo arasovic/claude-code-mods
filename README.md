@@ -1,5 +1,7 @@
 # claude-code-mods
 
+![claude-code-mods: mods that draw inside Claude Code](docs/banner.png)
+
 Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins that draw inside the terminal UI.
 
 ## Mods
