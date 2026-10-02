@@ -28,6 +28,10 @@ Restart Claude Code after installing. Update later with `claude plugin marketpla
 
 Tested on Claude Code 2.1.287. Mods are a recent Claude Code feature, so older versions will not load them.
 
+## Develop
+
+Each mod's README lists its checks. `typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`. Run it with no argument to check every mod.
+
 ## License
 
 MIT

@@ -30,5 +30,3 @@ claude plugin validate .
 claude plugin test .
 ../typecheck.sh compact-keeper
 ```
-
-`typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`.
