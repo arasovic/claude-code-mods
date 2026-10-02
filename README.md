@@ -6,11 +6,11 @@ Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins th
 
 | Mod | What it does |
 | --- | --- |
-| [session-meter](session-meter/README.md) | A docked pane with context usage, 5h/7d limits and pace, live tool calls and model requests; a one-time note to the model when limits or context run high |
-| [turn-footer](turn-footer/README.md) | A summary line under each answer (tools, requests, tokens, cache hit) and the running tool with its clock in the spinner |
-| [change-ledger](change-ledger/README.md) | A pane listing the files this session edited, with line counts and which agent edited them, beside the git working tree |
-| [turn-timeline](turn-timeline/README.md) | A pane drawing the current turn as a timeline of model requests and tool calls per loop, with where the time went |
-| [compact-keeper](compact-keeper/README.md) | Saves each compaction's summary, session id and edited files to `~/.claude/handoffs`, so nothing before `/compact` is lost |
+| [session‑meter](session-meter/README.md) | A docked pane with context usage, 5h/7d limits and pace, live tool calls and model requests; a one-time note to the model when limits or context run high |
+| [turn‑footer](turn-footer/README.md) | A summary line under each answer (tools, requests, tokens, cache hit) and the running tool with its clock in the spinner |
+| [change‑ledger](change-ledger/README.md) | A pane listing the files this session edited, with line counts and which agent edited them, beside the git working tree |
+| [turn‑timeline](turn-timeline/README.md) | A pane drawing the current turn as a timeline of model requests and tool calls per loop, with where the time went |
+| [compact‑keeper](compact-keeper/README.md) | Saves each compaction's summary, session id and edited files to `~/.claude/handoffs`, so nothing before `/compact` is lost |
 
 ## Install
 
