@@ -44,8 +44,14 @@ export const addTurn = (list: Diagram[], added: Diagram[], max = MAX_DIAGRAMS) =
 export const replaceTurn = (list: Diagram[], turnId: string, drawn: Diagram[]) =>
   list.map(d => (d.turnId === turnId ? (drawn.find(x => x.source === d.source) ?? d) : d))
 
+// A source the history already drew reuses that PNG; only new sources go to mmdc.
+export const cachedDraw = (list: Diagram[], source: string) => [...list].reverse().find(d => d.source === source && d.png && !d.error)
+
+// The turn folders the history still points at: its own turns and the folders its cached PNGs live in.
+export const keptFolders = (list: Diagram[]) => new Set(list.flatMap(d => [d.turnId, ...(d.png ? [d.png.split('/').slice(-2)[0]!] : [])]))
+
 // Other sessions share this folder, so only turns older than a day go; a newer one may still be on screen.
-// The history's own turns stay whatever their age.
+// The history's own folders stay whatever their age.
 const sweep = async ($: EngineInterface, root: string, keep: Set<string>) => {
   const entries = await $.fs.list(root).catch(() => [])
   const old = []
@@ -64,7 +70,7 @@ const installHint = async ($: EngineInterface) => {
 
 const render = async ($: EngineInterface, sources: string[], turnId: string) => {
   const root = `${((await $.env.get('TMPDIR')) ?? '/tmp/').replace(/\/?$/, '/')}show-me`
-  await sweep($, root, new Set([turnId, ...(await read($, diagrams)).map(d => d.turnId)]))
+  await sweep($, root, keptFolders(await read($, diagrams)))
   const dir = `${root}/${turnId}`
   // mmdc renders every fence of a markdown file in one browser launch, as out-1.png, out-2.png, ...
   await $.fs.write(`${dir}/in.md`, sources.map(s => '```mermaid\n' + s + '\n```').join('\n\n'))
@@ -125,12 +131,16 @@ export const register: Register = on => {
     if (sources.length === 0) return result
     // Rendering launches a browser; it runs after the turn so the turn ends on time.
     $.clock.after(0, async () => {
-      const history = await update($, diagrams, list => addTurn(list, sources.map(source => ({ turnId: e.turnId, title: titleOf(source), source }))))
+      const before = await read($, diagrams)
+      const added = sources.map(source => ({ ...cachedDraw(before, source), turnId: e.turnId, title: titleOf(source), source }))
+      const history = await update($, diagrams, list => addTurn(list, added))
       // The pane jumps to the turn's first diagram.
       await update($, index, () => Math.max(0, history.length - sources.length))
       const opened = await open($)
       if (!opened.isPlaced) $.ui.toast(`show-me: ${sources.length} diagram(s), /show-me to open`)
-      const drawn = await render($, sources, e.turnId)
+      const fresh = [...new Set(added.filter(d => !d.png).map(d => d.source))]
+      if (fresh.length === 0) return
+      const drawn = await render($, fresh, e.turnId)
       await update($, diagrams, list => replaceTurn(list, e.turnId, drawn))
     })
     return result
