@@ -58,8 +58,9 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   )
 }
 
-// Focus only when the person asked for the pane; an open after each answer must not take the prompt's keys.
-const open = ($: EngineInterface, focus?: true) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true, focus })
+// The surface grants focus only over an idle, empty composer, so an open never takes keys mid-draft;
+// when refused, closeOnEscape still lets Esc at the empty prompt close the pane.
+const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true, focus: true })
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -76,7 +77,7 @@ export const register: Register = on => {
       )
       return {}
     }
-    const opened = await open($, true)
+    const opened = await open($)
     return { text: opened.isPlaced ? 'Diagram pane opened.' : `Diagram pane is waiting: ${opened.reason}` }
   })
 
