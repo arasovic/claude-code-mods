@@ -34,13 +34,23 @@ export const fitImage = (width: number, height: number, maxCols: number, maxRows
 }
 
 const DAY = 24 * 60 * 60 * 1000
+// ponytail: fixed history cap; make it a userConfig option if someone needs more.
+export const MAX_DIAGRAMS = 30
+
+// A new turn's diagrams go after the history; the oldest drop past the cap.
+export const addTurn = (list: Diagram[], added: Diagram[], max = MAX_DIAGRAMS) => [...list, ...added].slice(-max)
+
+// A turn's rendered diagrams replace its placeholders by source, so one the cap dropped mid-render shifts nothing.
+export const replaceTurn = (list: Diagram[], turnId: string, drawn: Diagram[]) =>
+  list.map(d => (d.turnId === turnId ? (drawn.find(x => x.source === d.source) ?? d) : d))
 
 // Other sessions share this folder, so only turns older than a day go; a newer one may still be on screen.
-const sweep = async ($: EngineInterface, root: string, keep: string) => {
+// The history's own turns stay whatever their age.
+const sweep = async ($: EngineInterface, root: string, keep: Set<string>) => {
   const entries = await $.fs.list(root).catch(() => [])
   const old = []
   for (const entry of entries) {
-    if (entry.kind !== 'dir' || entry.name === keep) continue
+    if (entry.kind !== 'dir' || keep.has(entry.name)) continue
     const stat = await $.fs.stat(`${root}/${entry.name}`).catch(() => null)
     if (stat && Date.now() - stat.mtimeMs > DAY) old.push(`${root}/${entry.name}`)
   }
@@ -54,7 +64,7 @@ const installHint = async ($: EngineInterface) => {
 
 const render = async ($: EngineInterface, sources: string[], turnId: string) => {
   const root = `${((await $.env.get('TMPDIR')) ?? '/tmp/').replace(/\/?$/, '/')}show-me`
-  await sweep($, root, turnId)
+  await sweep($, root, new Set([turnId, ...(await read($, diagrams)).map(d => d.turnId)]))
   const dir = `${root}/${turnId}`
   // mmdc renders every fence of a markdown file in one browser launch, as out-1.png, out-2.png, ...
   await $.fs.write(`${dir}/in.md`, sources.map(s => '```mermaid\n' + s + '\n```').join('\n\n'))
@@ -78,10 +88,10 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   return Promise.all(
     sources.map(async (source, i): Promise<Diagram> => {
       const title = titleOf(source)
-      if (error) return { title, source, error }
+      if (error) return { turnId, title, source, error }
       const png = `${dir}/out-${i + 1}.png`
-      const read = await $.fs.read(png, { as: 'bytes' }).catch(() => null)
-      return read ? { title, source, png, ...pngSize(read.base64) } : { title, source, error: `mmdc wrote no ${png}` }
+      const bytes = await $.fs.read(png, { as: 'bytes' }).catch(() => null)
+      return bytes ? { turnId, title, source, png, ...pngSize(bytes.base64) } : { turnId, title, source, error: `mmdc wrote no ${png}` }
     }),
   )
 }
@@ -115,12 +125,13 @@ export const register: Register = on => {
     if (sources.length === 0) return result
     // Rendering launches a browser; it runs after the turn so the turn ends on time.
     $.clock.after(0, async () => {
-      await update($, diagrams, () => sources.map(source => ({ title: titleOf(source), source })))
-      await update($, index, () => 0)
+      const history = await update($, diagrams, list => addTurn(list, sources.map(source => ({ turnId: e.turnId, title: titleOf(source), source }))))
+      // The pane jumps to the turn's first diagram.
+      await update($, index, () => Math.max(0, history.length - sources.length))
       const opened = await open($)
       if (!opened.isPlaced) $.ui.toast(`show-me: ${sources.length} diagram(s), /show-me to open`)
       const drawn = await render($, sources, e.turnId)
-      await update($, diagrams, () => drawn)
+      await update($, diagrams, list => replaceTurn(list, e.turnId, drawn))
     })
     return result
   })
@@ -134,6 +145,7 @@ export const register: Register = on => {
     if (list.length === 0) return <Box flexDirection="column" paddingTop={1}><Box gap={1}><Text dimColor>No diagrams yet. Ask with /show-me.</Text>{close}</Box>{hint}</Box>
     const i = Math.min(await read($, index), list.length - 1)
     const d = list[i]!
+    const turns = [...new Set(list.map(x => x.turnId))]
     const step = (by: number) => () => update($, index, n => (n + by + list.length) % list.length)
     const cols = Math.max(1, e.props.bodyColumns)
     const room = Math.max(1, (e.viewport?.rows ?? 24) - 5)
@@ -150,6 +162,7 @@ export const register: Register = on => {
       <Box flexDirection="column" paddingTop={1}>
         <Box flexDirection="row" gap={1}>
           <Text bold>{`${i + 1}/${list.length}`}</Text>
+          <Text dimColor>{`turn ${turns.indexOf(d.turnId) + 1}/${turns.length}`}</Text>
           <Text>{d.title}</Text>
           <Button plain hotkey="p" label="‹" onPress={step(-1)} />
           <Button plain hotkey="n" label="›" onPress={step(1)} />

@@ -8,7 +8,8 @@ A pane that draws the mermaid diagrams of each answer as images.
 
 - **Any answer**: when an answer holds one or more ` ```mermaid ` fences, the pane opens and draws each one as a picture once the turn ends.
 - **`/show-me <question>`**: sends the question with a request to answer in mermaid diagrams.
-- **`/show-me`**: opens the pane again with the last diagrams.
+- **History**: the pane keeps the last 30 diagrams across turns. A new answer jumps to its first diagram; `p` and `n` step back into earlier turns. The header shows which turn a diagram came from.
+- **`/show-me`**: opens the pane again with the history.
 - **Keys**: the pane never takes the keyboard by itself, so typing and Claude Code's own keys keep working. Click the pane or press ctrl+x tab, then `p` and `n` step through the diagrams, `o` opens the PNG in the system viewer, and `x` or Esc closes the pane.
 
 If rendering fails, the pane shows the first error line and the diagram's source. If `mmdc` is not installed, a toast and the pane give the install command.

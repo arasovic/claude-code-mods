@@ -1,6 +1,22 @@
 import { expect, test } from 'claude-code/testing'
 
-import { extractMermaid, fitImage, pngSize } from '../hooks/register'
+import { addTurn, extractMermaid, fitImage, pngSize, replaceTurn } from '../hooks/register'
+
+const diagram = (turnId: string, title: string, png?: string) => ({ turnId, title, source: title, ...(png ? { png } : {}) })
+
+test('a new turn goes after the history and the oldest drop past the cap', () => {
+  const history = [diagram('t1', 'a'), diagram('t1', 'b'), diagram('t2', 'c')]
+  expect(addTurn(history, [diagram('t3', 'd')]).map(d => d.title)).toEqual(['a', 'b', 'c', 'd'])
+  expect(addTurn(history, [diagram('t3', 'd'), diagram('t3', 'e')], 3).map(d => d.title)).toEqual(['c', 'd', 'e'])
+})
+
+test('a rendered turn replaces only its own placeholders, in order', () => {
+  const history = [diagram('t1', 'a', '/a.png'), diagram('t2', 'b'), diagram('t2', 'c')]
+  const drawn = [diagram('t2', 'b', '/b.png'), diagram('t2', 'c', '/c.png')]
+  expect(replaceTurn(history, 't2', drawn).map(d => d.png)).toEqual(['/a.png', '/b.png', '/c.png'])
+  // The cap dropped the turn's first diagram while it rendered: the rest still match up.
+  expect(replaceTurn([diagram('t2', 'c')], 't2', drawn).map(d => d.png)).toEqual(['/c.png'])
+})
 
 test('every mermaid fence is extracted, other fences are not', () => {
   const answer = 'Intro\n\n```mermaid\nflowchart LR\n  a --> b\n```\n\n```ts\nconst x = 1\n```\n\n```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n'
