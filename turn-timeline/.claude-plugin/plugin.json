@@ -1,6 +1,6 @@
 {
   "name": "turn-timeline",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A pane (/timeline) drawing the current turn as a timeline: model requests and tool calls per loop, where the time went, and the slowest steps",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",

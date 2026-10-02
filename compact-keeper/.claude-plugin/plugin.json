@@ -1,6 +1,6 @@
 {
   "name": "compact-keeper",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Saves each compaction's summary, with the files edited before it, to ~/.claude/handoffs so the context before /compact can be recovered",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",

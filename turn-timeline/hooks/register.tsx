@@ -132,7 +132,7 @@ const fit = (row: Row, w: number): Row => {
 
 const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))) }, ...right]
 
-const CELL: Record<string, Seg> = {
+const CELL: Record<ReturnType<typeof laneCells>[number], Seg> = {
   tool: { t: '█', c: 'success' },
   failed: { t: '█', c: 'error' },
   model: { t: '▒', c: 'suggestion' },
@@ -255,7 +255,7 @@ export const register: Register = on => {
         end,
         cols,
         now,
-      ).map(k => CELL[k] ?? CELL.idle!)
+      ).map(k => CELL[k])
       const row: Row = [{ t: lane.label.padEnd(LABEL_W).slice(0, LABEL_W), b: lane.id === 'main', d: lane.id !== 'main' }, ...cells]
       return i ? [[], row] : [row]
     })
