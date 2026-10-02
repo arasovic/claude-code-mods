@@ -35,9 +35,15 @@ test('the band counts down from the last main-thread reply', async ($, on) => {
   mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
   on('settings.read', () => ({ value: {} }))
   on('ui.status', () => ({ value: undefined }))
+  // Another plugin's band (next-steps) beneath this one must stay drawn.
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>next steps</Text>
+  })
   const band = async () => {
     const ui = await $.ui.mount({ plugin: 'cache-timer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: BAND })
-    const text = (await ui.find({ type: 'Text' }))?.text
+    expect(await ui.find({ type: 'Text', text: 'next steps' })).toBeDefined()
+    const text = (await ui.find({ type: 'Text', text: /cache/ }))?.text
     await ui.unmount()
     return text
   }

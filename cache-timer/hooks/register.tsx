@@ -83,9 +83,16 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey || shown === undefined) return next(e)
-    const { Text } = $.ui.resolve(e)
-    return <Text>{shown}</Text>
+    // The band is shared: other plugins (next-steps) draw beneath this hook, so keep what they drew.
+    const below = await next(e)
+    if (e.props.hasSurvey || shown === undefined) return below
+    const { Box, Text } = $.ui.resolve(e)
+    return (
+      <Box flexDirection="column">
+        {below}
+        <Text>{shown}</Text>
+      </Box>
+    )
   })
 
   on('session.start', async ($, e, next) => (await start($), next(e)))
