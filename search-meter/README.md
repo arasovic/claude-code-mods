@@ -2,6 +2,8 @@
 
 Counts the searches Claude runs and colors each one, so you can see how many searches went to waste.
 
+![search-meter's status line](../docs/search-meter.png)
+
 ## What it shows
 
 A line under the prompt, from the first search on: `🔍 🟢 8 🟡 2 🔴 3 · last 🟢🟡🟢🟢🔴`.
