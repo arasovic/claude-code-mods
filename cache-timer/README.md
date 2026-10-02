@@ -30,7 +30,7 @@ Subagent requests do not count; they do not keep the main conversation's cache a
 
 ## Limits
 
-- Claude Code does not tell mods which lifetime it picked. The mod follows the engine's own order: `FORCE_PROMPT_CACHING_5M`, then `CLAUDE_CODE_PROMPT_CACHE_TTL`, then the `promptCacheTtl` setting, then `ENABLE_PROMPT_CACHING_1H`, then 1 hour on a subscription within its limits and 5 minutes otherwise. Until the first reply reports your limits it assumes 5 minutes.
+- Claude Code does not tell mods which lifetime it picked. The mod follows the engine's own order: `FORCE_PROMPT_CACHING_5M`, then `CLAUDE_CODE_PROMPT_CACHE_TTL`, then the `promptCacheTtl` setting, then `ENABLE_PROMPT_CACHING_1H`, then 1 hour on a subscription within its limits and 5 minutes otherwise. It remembers your limits from the last reading, so a new session starts with the right lifetime; on the very first run it assumes 5 minutes until the first reply reports them. After you switch between a subscription and an API key, the first reply can show the old lifetime for a moment.
 - "Past its limits" is read as a 5-hour or 7-day window at 100%. The engine's own flag for extra usage is not visible to mods.
 - Some accounts have a server-side feature that renews the cache while you are away. When it is on, the cache lives longer than the timer shows. A mod cannot see whether it is on.
 - Switching models with `/model` drops the cache; the timer does not know until the next reply.

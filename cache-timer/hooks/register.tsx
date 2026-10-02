@@ -37,6 +37,7 @@ const inputs: TtlInputs = { force5m: false, enable1h: false, subscribed: false, 
 let requestAt: number | undefined
 let context = 0
 let shown: string | undefined
+const LIMITS = 'limits'
 
 async function tick($: EngineInterface) {
   const text = statusText(await $.clock.now(), requestAt, cacheTtl(inputs), context)
@@ -51,6 +52,8 @@ async function start($: EngineInterface) {
   inputs.envTtl = await $.env.get('CLAUDE_CODE_PROMPT_CACHE_TTL')
   inputs.enable1h = isOn(await $.env.get('ENABLE_PROMPT_CACHING_1H'))
   inputs.settingTtl = (await $.settings.read()).promptCacheTtl
+  // The last session's limits, so the first reply after a start or reload shows the right lifetime.
+  Object.assign(inputs, await $.store.get(LIMITS))
   // A timer started inside a turn.step dispatch dies with it; session.start's runs until the module reloads.
   $.clock.every(1000, () => void tick($))
 }
@@ -76,7 +79,12 @@ export const register: Register = on => {
   })
 
   on('session.measure', async ($, e, next) => {
-    Object.assign(inputs, limitState(e.rateLimits))
+    // Empty limits mean "no subscription" only once a response has reported its tokens; before that, "no reading yet".
+    if (e.rateLimits.length > 0 || e.context.tokens !== undefined) {
+      const limits = limitState(e.rateLimits)
+      Object.assign(inputs, limits)
+      await $.store.set(LIMITS, limits)
+    }
     return next(e)
   })
 

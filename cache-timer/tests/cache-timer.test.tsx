@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
 import { cacheTtl, limitState, statusText } from '../hooks/register'
 
@@ -30,31 +30,36 @@ test('the status counts down, warns near the end and goes cold', () => {
   expect(statusText(3_600_001, 0, '1h', 800)).toBe('🔴 cache cold · next message re-writes 800 tokens')
 })
 
-test('the band counts down from the last main-thread reply', async ($, on) => {
-  const clock = mock.clock(on)
-  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+async function reply(...[$, on]: Parameters<TestBody>) {
   on('settings.read', () => ({ value: {} }))
   // Another plugin's band (next-steps) beneath this one must stay drawn.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>next steps</Text>
   })
-  const band = async () => {
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.measure', (_$, e) => ({ changed: e.changed }))
+  const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0, model: 'm' }
+  on('turn.step', async function* () {
+    return { turnId: 't', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage }
+  })
+  await $.session.start({ cwd: '/x', surface: null, isInteractive: true })
+  const step = $.turn.step({ turnId: 't', index: 0, model: 'm', messageCount: 1 })
+  while (!(await step.next()).done);
+  return async () => {
     const ui = await $.ui.mount({ plugin: 'cache-timer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: BAND })
     expect(await ui.find({ type: 'Text', text: 'next steps' })).toBeDefined()
     const text = (await ui.find({ type: 'Text', text: /cache/ }))?.text
     await ui.unmount()
     return text
   }
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0, model: 'm' }
-  on('turn.step', async function* () {
-    return { turnId: 't', index: 0, answer: '', toolUses: [], stopReason: 'end_turn' as const, usage }
-  })
+}
 
-  await $.session.start({ cwd: '/x', surface: null, isInteractive: true })
-  const step = $.turn.step({ turnId: 't', index: 0, model: 'm', messageCount: 1 })
-  while (!(await step.next()).done);
+test('the band counts down from the last main-thread reply', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+  mock.store(on)
+  const band = await reply($, on)
 
   await clock.advance(1000)
   expect(await band()).toBe('🟢 cache 4:59')
@@ -62,4 +67,18 @@ test('the band counts down from the last main-thread reply', async ($, on) => {
   expect(await band()).toBe('🟡 cache 0:59 · send soon')
   await clock.advance(60_000)
   expect(await band()).toBe('🔴 cache cold · next message re-writes 1k tokens')
+})
+
+test('a subscription stored by an earlier session gives the first reply an hour', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, {})
+  mock.store(on, { limits: { subscribed: true, overLimit: false } })
+  const band = await reply($, on)
+
+  await clock.advance(1000)
+  expect(await band()).toBe('🟢 cache 59:59')
+  // Moved to an API key: a response came back with no limits, so the stored subscription is dropped.
+  await $.session.measure({ context: { window: 200_000, tokens: 1_010 }, rateLimits: [], changed: ['context'] })
+  await clock.advance(1000)
+  expect(await band()).toBe('🟢 cache 4:58')
 })
