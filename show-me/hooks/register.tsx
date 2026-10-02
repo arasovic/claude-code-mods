@@ -16,9 +16,8 @@ const titleOf = (source: string) => source.split('\n').find(l => l.trim() && !l.
 
 // Width and height from the PNG's IHDR chunk: bytes 16-23, big-endian.
 export const pngSize = (base64: string) => {
-  const b = atob(base64.slice(0, 32))
-  const at = (i: number) => ((b.charCodeAt(i) << 24) | (b.charCodeAt(i + 1) << 16) | (b.charCodeAt(i + 2) << 8) | b.charCodeAt(i + 3)) >>> 0
-  return { width: at(16), height: at(20) }
+  const v = new DataView(Uint8Array.from(atob(base64.slice(0, 32)), c => c.charCodeAt(0)).buffer)
+  return { width: v.getUint32(16), height: v.getUint32(20) }
 }
 
 // A terminal cell is about twice as tall as it is wide.
@@ -35,7 +34,7 @@ export const fitImage = (width: number, height: number, maxCols: number, maxRows
 
 const DAY = 24 * 60 * 60 * 1000
 // ponytail: fixed history cap; make it a userConfig option if someone needs more.
-export const MAX_DIAGRAMS = 30
+const MAX_DIAGRAMS = 30
 
 // A new turn's diagrams go after the history; the oldest drop past the cap.
 export const addTurn = (list: Diagram[], added: Diagram[], max = MAX_DIAGRAMS) => [...list, ...added].slice(-max)
@@ -45,7 +44,7 @@ export const replaceTurn = (list: Diagram[], turnId: string, drawn: Diagram[]) =
   list.map(d => (d.turnId === turnId ? (drawn.find(x => x.source === d.source) ?? d) : d))
 
 // A source the history already drew reuses that PNG; only new sources go to mmdc.
-export const cachedDraw = (list: Diagram[], source: string) => [...list].reverse().find(d => d.source === source && d.png && !d.error)
+export const cachedDraw = (list: Diagram[], source: string) => list.findLast(d => d.source === source && d.png && !d.error)
 
 // The turn folders the history still points at: its own turns and the folders its cached PNGs live in.
 export const keptFolders = (list: Diagram[]) => new Set(list.flatMap(d => [d.turnId, ...(d.png ? [d.png.split('/').slice(-2)[0]!] : [])]))
@@ -139,8 +138,7 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const ui = $.ui.resolve(e)
-    const { Box, Text, Button } = ui
+    const { Box, Text, Button } = $.ui.resolve(e)
     const list = await read($, diagrams)
     const close = <Button key="close" plain hotkey="x" label="close" onPress={() => $.ui.close({ id: PANE })} />
     const hint = <Text dimColor>Click the pane or press ctrl+x tab to use its keys</Text>

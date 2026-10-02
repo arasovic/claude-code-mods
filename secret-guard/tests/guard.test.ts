@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { hasSecret, scrub, scrubDeep, secretCommand, sensitivePath, statusText, writesPlaceholder } from '../hooks/register'
+import { scrub, scrubDeep, secretCommand, sensitivePath, statusText, writesPlaceholder } from '../hooks/register'
 
 // Synthetic values, built so this file holds no literal that a scanner flags.
 const AWS = 'AKIA' + 'ABCDEFGHIJKLMNOP'
@@ -40,7 +40,7 @@ test('ordinary text and code stay as they are', () => {
     'aws example key AKIAIOSFODNN7EXAMPLE',
     'SECRET_KEY=short',
   ]) expect(scrub(text).text).toBe(text)
-  expect(hasSecret(`curl https://x.test/?k=${GH}`)).toBe(true)
+  expect(scrub(`curl https://x.test/?k=${GH}`).rules).toEqual(['github-token'])
 })
 
 test('structured results keep their shape', () => {

@@ -60,12 +60,10 @@ export const ago = (ms: number) => {
 
 const agentLabel = async ($: EngineInterface, id: string | undefined) => {
   if (!id) return 'main'
-  if (!agentTypes.has(id)) {
-    const found = (await $.agent.list()).find(a => a.id === id)
-    if (found) agentTypes.set(id, found.type)
-    else return 'fork'
-  }
-  return agentTypes.get(id) ?? 'fork'
+  // The engine's own forks (compaction, memory) carry ids no list names, so they are never cached.
+  const type = agentTypes.get(id) ?? (await $.agent.list()).find(a => a.id === id)?.type
+  if (type) agentTypes.set(id, type)
+  return type ?? 'fork'
 }
 
 const record = async ($: EngineInterface, path: string, delta: { added: number; removed: number }, agentId: string | undefined, created: boolean) => {
@@ -99,7 +97,7 @@ type Row = Seg[]
 
 const width = (row: Row) => row.reduce((n, s) => n + s.t.length, 0)
 
-export const fit = (row: Row, w: number): Row => {
+const fit = (row: Row, w: number): Row => {
   const out: Row = []
   let n = 0
   for (const s of row) {
@@ -163,6 +161,8 @@ export const register: Register = on => {
     const w = Math.max(28, e.props.bodyColumns - 1)
     const inner = w - 6
 
+    const draw = (row: Row, width: number) =>
+      fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
@@ -177,11 +177,7 @@ export const register: Register = on => {
           {rows.map((row, i) => (
             <Text key={String(i)}>
               <Text color={tone} dimColor>│  </Text>
-              {fit(row, inner).map((s, j) => (
-                <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-                  {s.t}
-                </Text>
-              ))}
+              {draw(row, inner)}
               <Text color={tone} dimColor>  │</Text>
             </Text>
           ))}
@@ -246,11 +242,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" paddingTop={1}>
         <Text>
-          {fit(glance, w - 3).map((s, j) => (
-            <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-              {s.t}
-            </Text>
-          ))}
+          {draw(glance, w - 3)}
         </Text>
         {frame('Edits', 'suggestion', editRows, more > 0 ? `+${more} more` : '')}
         {tree ? frame('Working tree', tree.files.some(f => !touched.has(`${tree.root}/${f.path}`)) ? 'warning' : 'success', gitRows, `${tree.files.length} changed`) : null}

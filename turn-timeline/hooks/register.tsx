@@ -77,13 +77,10 @@ export const axis = (duration: number, cols: number) => {
 }
 
 const agentLabel = async ($: EngineInterface, id: string) => {
-  if (!agentTypes.has(id)) {
-    const found = (await $.agent.list()).find(a => a.id === id)
-    // The engine's own forks (compaction, memory) carry ids no list names.
-    if (!found) return 'fork'
-    agentTypes.set(id, found.type)
-  }
-  return agentTypes.get(id) ?? 'fork'
+  // The engine's own forks (compaction, memory) carry ids no list names, so they are never cached.
+  const type = agentTypes.get(id) ?? (await $.agent.list()).find(a => a.id === id)?.type
+  if (type) agentTypes.set(id, type)
+  return type ?? 'fork'
 }
 
 // Opens a span on its loop's lane, adding the lane on first sight; returns the span id to close it with.
@@ -198,6 +195,8 @@ export const register: Register = on => {
     const inner = w - 6
     if (!t) return <Text dimColor>The timeline starts with the next turn.</Text>
 
+    const draw = (row: Row, width: number) =>
+      fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
@@ -212,11 +211,7 @@ export const register: Register = on => {
           {rows.map((row, i) => (
             <Text key={String(i)}>
               <Text color={tone} dimColor>│  </Text>
-              {fit(row, inner).map((s, j) => (
-                <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-                  {s.t}
-                </Text>
-              ))}
+              {draw(row, inner)}
               <Text color={tone} dimColor>  │</Text>
             </Text>
           ))}
@@ -305,11 +300,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" paddingTop={1}>
         <Text>
-          {fit(glance, w - 3).map((s, j) => (
-            <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-              {s.t}
-            </Text>
-          ))}
+          {draw(glance, w - 3)}
         </Text>
         {frame('Timeline', 'suggestion', timelineRows, `${t.lanes.length} ${t.lanes.length === 1 ? 'loop' : 'loops'}`)}
         {frame('Where time went', 'success', shareRows, 'main loop')}

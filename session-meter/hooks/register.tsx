@@ -208,13 +208,10 @@ const sample = async ($: EngineInterface, limits: MeterReading['limits']) => {
 
 const agentLabel = async ($: EngineInterface, id: string | undefined) => {
   if (!id) return 'main'
-  if (!agentTypes.has(id)) {
-    const found = (await $.agent.list()).find(a => a.id === id)
-    // The engine's own forks (compaction, memory) carry ids no list names.
-    if (found) agentTypes.set(id, found.type)
-    else return 'fork'
-  }
-  return agentTypes.get(id) ?? 'fork'
+  // The engine's own forks (compaction, memory) carry ids no list names, so they are never cached.
+  const type = agentTypes.get(id) ?? (await $.agent.list()).find(a => a.id === id)?.type
+  if (type) agentTypes.set(id, type)
+  return type ?? 'fork'
 }
 
 export const register: Register = on => {
@@ -300,6 +297,8 @@ export const register: Register = on => {
     const inner = w - 6
     if (!b) return <Text dimColor>Waiting for the first context reading.</Text>
 
+    const draw = (row: Row, width: number) =>
+      fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
@@ -314,11 +313,7 @@ export const register: Register = on => {
           {rows.map((row, i) => (
             <Text key={String(i)}>
               <Text color={tone} dimColor>│  </Text>
-              {fit(row, inner).map((s, j) => (
-                <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-                  {s.t}
-                </Text>
-              ))}
+              {draw(row, inner)}
               <Text color={tone} dimColor>  │</Text>
             </Text>
           ))}
@@ -389,10 +384,7 @@ export const register: Register = on => {
       )
       glance.push({ t: `   ${win.label} `, d: true }, { t: `${Math.round(limit.percentUsed)}%`, c: tone, b: true })
     }
-    const hhmm = (ms: number) => {
-      const d = new Date(ms)
-      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-    }
+    const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
     if (sent.length) limitRows.push([], ...sent.map(n => [{ t: `${hhmm(n.at)} `, d: true }, { t: `note sent: ${n.text}` }]))
     const limitTone = tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'success'
 
@@ -414,10 +406,9 @@ export const register: Register = on => {
       : [[{ t: 'No tool calls yet.', d: true }]]
     const toolTone = shown.find(t => t.ok !== undefined)?.ok === false ? 'error' : 'success'
 
-    const col = (agent: string, input: string, output: string, cache: string, time: string) => `${agent.padEnd(10).slice(0, 10)}${input.padStart(6)}${output.padStart(6)}${cache.padStart(7)}${time.padStart(7)}`
     const askRows: Row[] = asks.length
       ? [
-          [{ t: col('loop', 'in', 'out', 'cache', 'time'), d: true }],
+          [{ t: 'loop          in   out  cache   time', d: true }],
           ...asks.slice(0, askCount).map(q => {
             const hit = q.input ? Math.round((q.cached / q.input) * 100) : 0
             const cacheTone = hit < 20 ? 'error' : hit < 50 ? 'warning' : undefined
@@ -436,11 +427,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" paddingTop={1}>
         <Text>
-          {fit(glance, w - 3).map((s, j) => (
-            <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>
-              {s.t}
-            </Text>
-          ))}
+          {draw(glance, w - 3)}
         </Text>
         {frame('Context', zone(b.percent), contextRows)}
         {limitRows.length ? frame('Limits', limitTone, limitRows) : null}

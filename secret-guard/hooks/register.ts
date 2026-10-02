@@ -47,7 +47,6 @@ export const scrub = (text: string): { text: string; rules: string[] } => {
   return { text: out, rules }
 }
 
-export const hasSecret = (text: string) => scrub(text).rules.length > 0
 
 // Rewrites every string inside a value, keeping its shape.
 export const scrubDeep = <T>(value: T, found: string[]): T => {
@@ -181,7 +180,7 @@ export const register: Register = on => {
       const reason = secretCommand(args.command, home)
       if (reason) return deny(reason)
     }
-    if (!LOCAL_WRITES.has(e.tool) && hasSecret(JSON.stringify(args))) return deny('this call would send a secret', SEND_HINT)
+    if (!LOCAL_WRITES.has(e.tool) && scrub(JSON.stringify(args)).rules.length > 0) return deny('this call would send a secret', SEND_HINT)
     if (LOCAL_WRITES.has(e.tool) && writesPlaceholder(args)) return deny('this write contains a hidden-value tag', WRITE_HINT)
 
     const ran = await next(e)

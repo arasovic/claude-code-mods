@@ -6,7 +6,6 @@ const edited = atom({ plugin: 'compact-keeper', key: 'edited' } as const, [] as 
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const stamp = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-const time = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 
 export const fileName = (at: number, cwd: string, sessionId: string) => {
   const d = new Date(at)
@@ -26,7 +25,7 @@ export const handoff = (h: { at: number; cwd: string; sessionId: string; trigger
   return [
     `# Handoff: ${h.cwd.split('/').filter(Boolean).pop() ?? h.cwd}`,
     '',
-    `- Compacted: ${stamp(d)} ${time(d)} (${h.trigger})${size}`,
+    `- Compacted: ${stamp(d)} ${d.toTimeString().slice(0, 5)} (${h.trigger})${size}`,
     `- Directory: ${h.cwd}`,
     `- Session: ${h.sessionId} (\`claude --resume ${h.sessionId}\`)`,
     ...(h.instructions ? [`- Instructions: ${h.instructions}`] : []),
