@@ -47,7 +47,6 @@ export const scrub = (text: string): { text: string; rules: string[] } => {
   return { text: out, rules }
 }
 
-
 // Rewrites every string inside a value, keeping its shape.
 export const scrubDeep = <T>(value: T, found: string[]): T => {
   if (typeof value === 'string') {

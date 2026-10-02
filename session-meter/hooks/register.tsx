@@ -384,6 +384,7 @@ export const register: Register = on => {
       )
       glance.push({ t: `   ${win.label} `, d: true }, { t: `${Math.round(limit.percentUsed)}%`, c: tone, b: true })
     }
+    // toTimeString starts with the local HH:MM:SS.
     const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
     if (sent.length) limitRows.push([], ...sent.map(n => [{ t: `${hhmm(n.at)} `, d: true }, { t: `note sent: ${n.text}` }]))
     const limitTone = tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'success'

@@ -25,6 +25,7 @@ export const handoff = (h: { at: number; cwd: string; sessionId: string; trigger
   return [
     `# Handoff: ${h.cwd.split('/').filter(Boolean).pop() ?? h.cwd}`,
     '',
+    // toTimeString starts with the local HH:MM:SS.
     `- Compacted: ${stamp(d)} ${d.toTimeString().slice(0, 5)} (${h.trigger})${size}`,
     `- Directory: ${h.cwd}`,
     `- Session: ${h.sessionId} (\`claude --resume ${h.sessionId}\`)`,
