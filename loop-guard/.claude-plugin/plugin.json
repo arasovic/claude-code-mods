@@ -1,0 +1,8 @@
+{
+  "name": "loop-guard",
+  "version": "0.1.0",
+  "description": "Tells the model, out of the user's sight, to stop when the same call fails twice with the same error",
+  "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
+  "repository": "https://github.com/arasovic/claude-code-mods",
+  "license": "MIT"
+}

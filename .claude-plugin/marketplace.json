@@ -46,6 +46,11 @@
       "name": "search-meter",
       "source": "./search-meter",
       "description": "Count the model's searches and color each one: green found fast, yellow found slowly, red found nothing"
+    },
+    {
+      "name": "loop-guard",
+      "source": "./loop-guard",
+      "description": "Tell the model, out of the user's sight, to stop when the same call fails twice with the same error"
     }
   ]
 }
