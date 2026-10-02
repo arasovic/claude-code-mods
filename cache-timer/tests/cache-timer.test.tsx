@@ -34,7 +34,6 @@ test('the band counts down from the last main-thread reply', async ($, on) => {
   const clock = mock.clock(on)
   mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
   on('settings.read', () => ({ value: {} }))
-  on('ui.status', () => ({ value: undefined }))
   // Another plugin's band (next-steps) beneath this one must stay drawn.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Text } = $.ui.resolve(e)
