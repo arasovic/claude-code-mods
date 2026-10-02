@@ -6,6 +6,26 @@
       "name": "session-meter",
       "source": "./session-meter",
       "description": "Live session pane (/ctx): context, limits, tool calls, model requests; a one-time note to the model when limits or context cross a threshold"
+    },
+    {
+      "name": "turn-footer",
+      "source": "./turn-footer",
+      "description": "A turn summary under each answer (tools, requests, tokens, cache hit) and the running tool in the spinner"
+    },
+    {
+      "name": "change-ledger",
+      "source": "./change-ledger",
+      "description": "A pane (/changes) listing the files this session edited, beside the git working tree"
+    },
+    {
+      "name": "turn-timeline",
+      "source": "./turn-timeline",
+      "description": "A pane (/timeline) drawing the current turn as a timeline of model requests and tool calls per loop"
+    },
+    {
+      "name": "compact-keeper",
+      "source": "./compact-keeper",
+      "description": "Save each compaction's summary, session id and edited files to ~/.claude/handoffs"
     }
   ]
 }

@@ -397,8 +397,8 @@ export const register: Register = on => {
     const limitTone = tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'success'
 
     // Tools and Requests share the rows left below; each keeps at least three.
-    // The glance row, each frame's two borders and top margin, and the Requests column header.
-    const fixed = 1 + (contextRows.length + 3) + (limitRows.length ? limitRows.length + 3 : 0) + 3 + 4
+    // The top padding and glance row, each frame's two borders and top margin, and the Requests column header.
+    const fixed = 2 +(contextRows.length + 3) + (limitRows.length ? limitRows.length + 3 : 0) + 3 + 4
     const left = Math.max(6, e.props.scroll.bodyRows - fixed)
     const toolCount = Math.max(3, Math.ceil(left / 2))
     const askCount = Math.max(3, left - toolCount)
@@ -434,7 +434,7 @@ export const register: Register = on => {
     const model = asks[0]?.model.replace(/^claude-/, '') ?? ''
 
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" paddingTop={1}>
         <Text>
           {fit(glance, w - 3).map((s, j) => (
             <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>

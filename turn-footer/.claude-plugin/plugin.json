@@ -1,0 +1,9 @@
+{
+  "name": "turn-footer",
+  "version": "0.1.0",
+  "description": "Turns the line under each answer into a turn summary (tools, requests, tokens, cache hit) and shows the running tool in the spinner",
+  "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
+  "repository": "https://github.com/arasovic/claude-code-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
