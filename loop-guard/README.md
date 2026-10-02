@@ -2,6 +2,8 @@
 
 Stops Claude from running the same failing call over and over.
 
+![loop-guard's toast after a repeated failure](../docs/loop-guard.png)
+
 ## What it does
 
 When a tool call fails twice with the same arguments and the same error, loop-guard adds a note to the second error. Only the model reads it; it tells the model not to try a third time, to re-read the error, and to change approach or ask you. A toast tells you the note went out.
