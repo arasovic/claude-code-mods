@@ -58,7 +58,8 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   )
 }
 
-const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true })
+// Focus only when the person asked for the pane; an open after each answer must not take the prompt's keys.
+const open = ($: EngineInterface, focus?: true) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true, focus })
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -75,7 +76,7 @@ export const register: Register = on => {
       )
       return {}
     }
-    const opened = await open($)
+    const opened = await open($, true)
     return { text: opened.isPlaced ? 'Diagram pane opened.' : `Diagram pane is waiting: ${opened.reason}` }
   })
 
