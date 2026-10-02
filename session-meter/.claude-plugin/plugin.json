@@ -1,6 +1,6 @@
 {
   "name": "session-meter",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; a one-time note to the model when limits or context cross a threshold",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",

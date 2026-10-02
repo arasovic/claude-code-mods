@@ -398,7 +398,7 @@ export const register: Register = on => {
 
     // Tools and Requests share the rows left below; each keeps at least three.
     // The top padding and glance row, each frame's two borders and top margin, and the Requests column header.
-    const fixed = 2 +(contextRows.length + 3) + (limitRows.length ? limitRows.length + 3 : 0) + 3 + 4
+    const fixed = 2 + (contextRows.length + 3) + (limitRows.length ? limitRows.length + 3 : 0) + 3 + 4
     const left = Math.max(6, e.props.scroll.bodyRows - fixed)
     const toolCount = Math.max(3, Math.ceil(left / 2))
     const askCount = Math.max(3, left - toolCount)
