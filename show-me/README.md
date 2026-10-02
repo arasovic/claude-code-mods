@@ -2,6 +2,8 @@
 
 A pane that draws the mermaid diagrams of each answer as images.
 
+<img src="../docs/show-me.png" alt="The show-me pane drawing a flowchart from an answer, with keys to step through, open and close" width="780">
+
 ## What it does
 
 - **Any answer**: when an answer holds one or more ` ```mermaid ` fences, the pane opens and draws each one as a picture once the turn ends.
