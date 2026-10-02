@@ -1,0 +1,11 @@
+{
+  "name": "claude-code-mods",
+  "owner": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
+  "plugins": [
+    {
+      "name": "session-meter",
+      "source": "./session-meter",
+      "description": "Live session pane (/ctx): context, limits, tool calls, model requests; a one-time note to the model when limits or context cross a threshold"
+    }
+  ]
+}
