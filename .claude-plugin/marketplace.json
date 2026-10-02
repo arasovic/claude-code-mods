@@ -26,6 +26,11 @@
       "name": "compact-keeper",
       "source": "./compact-keeper",
       "description": "Save each compaction's summary, session id and edited files to ~/.claude/handoffs"
+    },
+    {
+      "name": "show-me",
+      "source": "./show-me",
+      "description": "Draw the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal"
     }
   ]
 }

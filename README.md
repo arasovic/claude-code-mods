@@ -13,6 +13,7 @@ Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins th
 | [change‑ledger](change-ledger/README.md) | A pane listing the files this session edited, with line counts and which agent edited them, beside the git working tree |
 | [turn‑timeline](turn-timeline/README.md) | A pane drawing the current turn as a timeline of model requests and tool calls per loop, with where the time went |
 | [compact‑keeper](compact-keeper/README.md) | Saves each compaction's summary, session id and edited files to `~/.claude/handoffs`, so nothing before `/compact` is lost |
+| [show‑me](show-me/README.md) | A pane drawing the mermaid diagrams of each answer as images; `/show-me <question>` asks for an answer in diagrams |
 
 ## Install
 

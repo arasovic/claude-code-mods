@@ -1,0 +1,9 @@
+{
+  "name": "show-me",
+  "version": "0.1.2",
+  "description": "Draw the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal such as Ghostty",
+  "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
+  "repository": "https://github.com/arasovic/claude-code-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts"
+}
