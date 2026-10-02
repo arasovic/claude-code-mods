@@ -2,6 +2,8 @@
 
 Counts down to when the prompt cache expires, so you can send your next message while it is still warm.
 
+![cache-timer's status line](../docs/cache-timer.png)
+
 ## Why it matters
 
 Claude Code caches the start of the conversation. The next message reads that part from the cache, which costs a fraction of normal input. If you wait too long, the cache expires and the next message writes the whole conversation to the cache again, at a higher rate than normal input. In a long session that is a large one-time charge.
