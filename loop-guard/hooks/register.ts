@@ -18,9 +18,10 @@ export const register: Register = on => {
     }
     // Same call, same error: nothing changed between the two tries. A rerun after a fix fails differently.
     const error = r.text ?? JSON.stringify(r.result)
-    const repeat = failed.get(key) === error
-    failed.set(key, error)
-    return repeat ? { ...r, context: [...(r.context ?? []), NOTE] } : r
+    if (failed.get(key) !== error) return (failed.set(key, error), r)
+    // The toast is titled with the mod's name.
+    $.ui.toast(`the same ${e.tool} call failed twice; Claude was told to change approach`)
+    return { ...r, context: [...(r.context ?? []), NOTE] }
   })
 
   on('session.end', async ($, e, next) => (failed.clear(), next(e)))
