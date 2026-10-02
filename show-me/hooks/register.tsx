@@ -150,7 +150,7 @@ export const register: Register = on => {
     const ui = $.ui.resolve(e)
     const { Box, Text, Button } = ui
     const list = await read($, diagrams)
-    const close = <Button plain hotkey="x" label="close" onPress={() => $.ui.close({ id: PANE })} />
+    const close = <Button key="close" plain hotkey="x" label="close" onPress={() => $.ui.close({ id: PANE })} />
     const hint = <Text dimColor>Click the pane or press ctrl+x tab to use its keys</Text>
     if (list.length === 0) return <Box flexDirection="column" paddingTop={1}><Box gap={1}><Text dimColor>No diagrams yet. Ask with /show-me.</Text>{close}</Box>{hint}</Box>
     const i = Math.min(await read($, index), list.length - 1)
@@ -174,9 +174,9 @@ export const register: Register = on => {
           <Text bold>{`${i + 1}/${list.length}`}</Text>
           <Text dimColor>{`turn ${turns.indexOf(d.turnId) + 1}/${turns.length}`}</Text>
           <Text>{d.title}</Text>
-          <Button plain hotkey="p" label="‹" onPress={step(-1)} />
-          <Button plain hotkey="n" label="›" onPress={step(1)} />
-          {d.png && <Button plain hotkey="o" label="open" onPress={() => void $.process.run(['open', d.png!])} />}
+          <Button key="prev" plain hotkey="p" label="‹" onPress={step(-1)} />
+          <Button key="next" plain hotkey="n" label="›" onPress={step(1)} />
+          {d.png && <Button key="open" plain hotkey="o" label="open" onPress={() => void $.process.run(['open', d.png!])} />}
           {close}
         </Box>
         {hint}
