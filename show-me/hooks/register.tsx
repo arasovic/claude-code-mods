@@ -69,7 +69,10 @@ export const register: Register = on => {
   on('command.run', { command: 'show-me' }, async ($, e) => {
     const question = e.args.trim()
     if (question) {
-      void $.prompt.submit({ text: `${question}\n\n${ASK}`, asUser: true })
+      // The engine refuses a submit while command.run holds the turn, so it goes out once the command is done.
+      $.clock.after(0, () =>
+        $.prompt.submit({ text: `${question}\n\n${ASK}`, asUser: true }).catch((err: unknown) => $.ui.toast(`show-me: ${String(err)}`)),
+      )
       return {}
     }
     const opened = await open($)
