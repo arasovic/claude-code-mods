@@ -45,4 +45,7 @@ Restart Claude Code. The pane opens on its own in a terminal 144 columns or wide
 ```sh
 claude plugin validate .
 claude plugin test .
+../typecheck.sh session-meter
 ```
+
+`typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`.

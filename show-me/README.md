@@ -45,4 +45,7 @@ Restart Claude Code and type `/show-me how does this request flow through the ap
 ```sh
 claude plugin validate .
 claude plugin test .
+../typecheck.sh show-me
 ```
+
+`typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`.

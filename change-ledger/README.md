@@ -31,4 +31,7 @@ Restart Claude Code and type `/changes`. Panes open as tabs, so it sits beside o
 ```sh
 claude plugin validate .
 claude plugin test .
+../typecheck.sh change-ledger
 ```
+
+`typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`.

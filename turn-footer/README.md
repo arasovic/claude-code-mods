@@ -25,4 +25,7 @@ Restart Claude Code. The summary shows from the next answer on.
 ```sh
 claude plugin validate .
 claude plugin test .
+../typecheck.sh turn-footer
 ```
+
+`typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`.
