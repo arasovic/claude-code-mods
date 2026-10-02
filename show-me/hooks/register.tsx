@@ -33,8 +33,29 @@ export const fitImage = (width: number, height: number, maxCols: number, maxRows
   return { columns: clamp(columns, maxCols), rows: clamp(rows, maxRows) }
 }
 
+const DAY = 24 * 60 * 60 * 1000
+
+// Other sessions share this folder, so only turns older than a day go; a newer one may still be on screen.
+const sweep = async ($: EngineInterface, root: string, keep: string) => {
+  const entries = await $.fs.list(root).catch(() => [])
+  const old = []
+  for (const entry of entries) {
+    if (entry.kind !== 'dir' || entry.name === keep) continue
+    const stat = await $.fs.stat(`${root}/${entry.name}`).catch(() => null)
+    if (stat && Date.now() - stat.mtimeMs > DAY) old.push(`${root}/${entry.name}`)
+  }
+  if (old.length) await $.process.run(['rm', '-rf', ...old]).catch(() => {})
+}
+
+const installHint = async ($: EngineInterface) => {
+  const hasChrome = await $.fs.exists(CHROME)
+  return `mmdc is not installed: ${hasChrome ? 'PUPPETEER_SKIP_DOWNLOAD=1 ' : ''}npm i -g @mermaid-js/mermaid-cli`
+}
+
 const render = async ($: EngineInterface, sources: string[], turnId: string) => {
-  const dir = `${((await $.env.get('TMPDIR')) ?? '/tmp/').replace(/\/?$/, '/')}show-me/${turnId}`
+  const root = `${((await $.env.get('TMPDIR')) ?? '/tmp/').replace(/\/?$/, '/')}show-me`
+  await sweep($, root, turnId)
+  const dir = `${root}/${turnId}`
   // mmdc renders every fence of a markdown file in one browser launch, as out-1.png, out-2.png, ...
   await $.fs.write(`${dir}/in.md`, sources.map(s => '```mermaid\n' + s + '\n```').join('\n\n'))
   // Use the installed Chrome when there is one, so mmdc needs no browser download of its own.
@@ -45,7 +66,14 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   if (hasChrome) await $.fs.write(`${dir}/puppeteer.json`, JSON.stringify({ executablePath: CHROME, headless: 'shell' }))
   const run = await $.process
     .run(['mmdc', ...(hasChrome ? ['-p', `${dir}/puppeteer.json`] : []), '-i', `${dir}/in.md`, '-o', `${dir}/out.md`, '-e', 'png', '-t', 'dark', '-b', 'transparent', '-s', '2'], { timeoutMs: 120_000 })
-    .catch((err: unknown) => ({ exitCode: 1, stderr: String(err) }))
+    .catch(async (err: unknown) => {
+      // A rejection means mmdc could not start or ran past the timeout; only a missing mmdc gets the install hint.
+      const found = await $.process.run(['sh', '-c', 'command -v mmdc']).then(r => r.exitCode === 0, () => true)
+      if (found) return { exitCode: 1, stderr: String(err) }
+      const hint = await installHint($)
+      $.ui.toast(`show-me: ${hint}`)
+      return { exitCode: 127, stderr: hint }
+    })
   const error = run.exitCode === 0 ? undefined : run.stderr.trim().split('\n')[0] || `mmdc exited ${run.exitCode}`
   return Promise.all(
     sources.map(async (source, i): Promise<Diagram> => {
@@ -58,9 +86,9 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   )
 }
 
-// The surface grants focus only over an idle, empty composer, so an open never takes keys mid-draft;
-// when refused, closeOnEscape still lets Esc at the empty prompt close the pane.
-const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true, focus: true })
+// No focus: a focused pane takes the arrows and the hotkey letters away from the prompt.
+// The person clicks the pane (or ctrl+x tab) to use its keys.
+const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true })
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -102,12 +130,13 @@ export const register: Register = on => {
     const { Box, Text, Button } = ui
     const list = await read($, diagrams)
     const close = <Button plain hotkey="x" label="close" onPress={() => $.ui.close({ id: PANE })} />
-    if (list.length === 0) return <Box paddingTop={1} gap={1}><Text dimColor>No diagrams yet. Ask with /show-me.</Text>{close}</Box>
+    const hint = <Text dimColor>Click the pane or press ctrl+x tab to use its keys</Text>
+    if (list.length === 0) return <Box flexDirection="column" paddingTop={1}><Box gap={1}><Text dimColor>No diagrams yet. Ask with /show-me.</Text>{close}</Box>{hint}</Box>
     const i = Math.min(await read($, index), list.length - 1)
     const d = list[i]!
     const step = (by: number) => () => update($, index, n => (n + by + list.length) % list.length)
     const cols = Math.max(1, e.props.bodyColumns)
-    const room = Math.max(1, (e.viewport?.rows ?? 24) - 4)
+    const room = Math.max(1, (e.viewport?.rows ?? 24) - 5)
 
     let body
     if (d.error) body = <Box flexDirection="column"><Text color="red">{d.error}</Text><Text dimColor>{d.source}</Text></Box>
@@ -127,6 +156,7 @@ export const register: Register = on => {
           {d.png && <Button plain hotkey="o" label="open" onPress={() => void $.process.run(['open', d.png!])} />}
           {close}
         </Box>
+        {hint}
         {body}
       </Box>
     )
