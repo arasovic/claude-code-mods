@@ -2,7 +2,7 @@
 
 Counts down to when the prompt cache expires, so you can send your next message while it is still warm.
 
-![cache-timer's status line](../docs/cache-timer.png)
+![cache-timer's band above the prompt](../docs/cache-timer.png)
 
 ## Why it matters
 
@@ -20,7 +20,7 @@ So the timer helps most on 5 minutes, where a coffee break is enough to lose the
 
 ## What it shows
 
-A status line under the prompt, counting from the last request of the main conversation:
+A line just above the prompt, counting from the last request of the main conversation. It sits apart from the status lines under the prompt, so its tick every second does not shuffle them:
 
 - 🟢 `cache 54:12`: the cache is warm.
 - 🟡 `cache 0:48 · send soon`: less than a fifth of its life is left.
@@ -43,7 +43,7 @@ claude plugin marketplace add arasovic/claude-code-mods
 claude plugin install cache-timer@claude-code-mods
 ```
 
-Restart Claude Code. The timer appears under the prompt after the first reply.
+Restart Claude Code. The timer appears above the prompt after the first reply.
 
 ## Develop
 

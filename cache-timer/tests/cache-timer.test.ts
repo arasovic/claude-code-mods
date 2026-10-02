@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { cacheTtl, limitState, statusText } from '../hooks/register'
 
+const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
 const base = { force5m: false, enable1h: false, subscribed: false, overLimit: false }
 
 test('the TTL follows the engine order', () => {
@@ -29,15 +30,17 @@ test('the status counts down, warns near the end and goes cold', () => {
   expect(statusText(3_600_001, 0, '1h', 800)).toBe('🔴 cache cold · next message re-writes 800 tokens')
 })
 
-test('the line counts down from the last main-thread reply', async ($, on) => {
+test('the band counts down from the last main-thread reply', async ($, on) => {
   const clock = mock.clock(on)
   mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
   on('settings.read', () => ({ value: {} }))
-  const lines: (string | undefined)[] = []
-  on('ui.status', (_$, e) => {
-    lines.push(e.text)
-    return { value: undefined }
-  })
+  on('ui.status', () => ({ value: undefined }))
+  const band = async () => {
+    const ui = await $.ui.mount({ plugin: 'cache-timer', surface: 'terminal', component: 'AbovePrompt', requestId: 'band', props: BAND })
+    const text = (await ui.find({ type: 'Text' }))?.text
+    await ui.unmount()
+    return text
+  }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   const usage = { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0, model: 'm' }
   on('turn.step', async function* () {
@@ -49,9 +52,9 @@ test('the line counts down from the last main-thread reply', async ($, on) => {
   while (!(await step.next()).done);
 
   await clock.advance(1000)
-  expect(lines.at(-1)).toBe('🟢 cache 4:59')
+  expect(await band()).toBe('🟢 cache 4:59')
   await clock.advance(240_000)
-  expect(lines.at(-1)).toBe('🟡 cache 0:59 · send soon')
+  expect(await band()).toBe('🟡 cache 0:59 · send soon')
   await clock.advance(60_000)
-  expect(lines.at(-1)).toBe('🔴 cache cold · next message re-writes 1k tokens')
+  expect(await band()).toBe('🔴 cache cold · next message re-writes 1k tokens')
 })

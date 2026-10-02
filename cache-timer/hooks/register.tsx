@@ -42,7 +42,7 @@ async function tick($: EngineInterface) {
   const text = statusText(await $.clock.now(), requestAt, cacheTtl(inputs), context)
   if (text !== shown) {
     shown = text
-    $.ui.status(text)
+    $.ui.invalidate('ui.render')
   }
 }
 
@@ -51,6 +51,8 @@ async function start($: EngineInterface) {
   inputs.envTtl = await $.env.get('CLAUDE_CODE_PROMPT_CACHE_TTL')
   inputs.enable1h = isOn(await $.env.get('ENABLE_PROMPT_CACHING_1H'))
   inputs.settingTtl = (await $.settings.read()).promptCacheTtl
+  // A version that drew a status row may have left it behind on reload.
+  $.ui.status(undefined)
   // A timer started inside a turn.step dispatch dies with it; session.start's runs until the module reloads.
   $.clock.every(1000, () => void tick($))
 }
@@ -78,6 +80,12 @@ export const register: Register = on => {
   on('session.measure', async ($, e, next) => {
     Object.assign(inputs, limitState(e.rateLimits))
     return next(e)
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey || shown === undefined) return next(e)
+    const { Text } = $.ui.resolve(e)
+    return <Text>{shown}</Text>
   })
 
   on('session.start', async ($, e, next) => (await start($), next(e)))
