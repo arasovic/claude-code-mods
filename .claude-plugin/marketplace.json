@@ -41,6 +41,11 @@
       "name": "cache-timer",
       "source": "./cache-timer",
       "description": "Count down to when the prompt cache expires, so the next message goes out before the whole conversation is cached again"
+    },
+    {
+      "name": "search-meter",
+      "source": "./search-meter",
+      "description": "Count the model's searches and color each one: green found fast, yellow found slowly, red found nothing"
     }
   ]
 }
