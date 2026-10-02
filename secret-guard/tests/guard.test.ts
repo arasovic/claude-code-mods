@@ -73,6 +73,14 @@ test('commands that read credential files or print secrets are caught', () => {
     expect(secretCommand(c, HOME)).toBeUndefined()
 })
 
+test('code that names env is not a credential file, a whole-env dump is still caught', () => {
+  for (const c of ['grep -n "mock.env(on" tests/a.test.ts', 'grep -rn process.env src', 'rg "import.meta.env" app', 'grep -rn c.env worker',
+    `node -e 'console.log(process.env.HOME)'`, 'echo "x" | sed s/a.env(/b/'])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of [`node -e 'console.log(process.env)'`, `python3 -c 'print(os.environ)'`, 'cat prod.env', 'cat $(echo .env)', 'cat .env$(true)'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)

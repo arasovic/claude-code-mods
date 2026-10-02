@@ -64,7 +64,9 @@ export const scrubDeep = <T>(value: T, found: string[]): T => {
 
 // Matched against the lowercased path with forward slashes and a leading slash.
 const SENSITIVE_PATHS: readonly RegExp[] = [
-  /\/\.env$/, /\/\.env\.(?!(example|sample|template|defaults|dist)$)[^/]+$/, /\/[^/]+\.env$/, /\/\.envrc$/, /\/\.dev\.vars(\.[^/]+)?$/, /\/\.flaskenv$/,
+  // `name.env` files, but not the code spellings a search names (`grep -rn process.env src`).
+  /\/\.env$/, /\/\.env\.(?!(example|sample|template|defaults|dist)$)[^/]+$/, /\/(?!(process|import\.meta|c)\.env$)[^/]+\.env$/,
+  /\/\.envrc$/, /\/\.dev\.vars(\.[^/]+)?$/, /\/\.flaskenv$/,
   /\/\.(aws|gem|cargo|config\/git)\/credentials(\.toml)?$/, /\/credentials\.json$/, /\/service-account[^/]*\.json$/, /\/\.vault-token$/, /\/\.vault_pass$/,
   /\.(key|p12|pfx|jks|keystore|ppk)$/,
   /\/id_(rsa|dsa|ecdsa|ed25519)(_sk)?$/,
@@ -101,13 +103,16 @@ const SECRET_COMMANDS: readonly RegExp[] = [
 ]
 
 // ponytail: plain split on shell operators; sh -c, eval, globs and scripts the model writes pass through. Output scrubbing is the net for those.
+// A name right before `(` is a function call (`mock.env(on)`), not a file; `$(` keeps its `$`, so a substitution still splits.
 const segments = (command: string) =>
-  command.split(/&&|\|\||[;|\n]|\$\(|`|\(|\)/).map(s => s.trim().replace(/^(sudo|command|exec|time|nohup)\s+/, '')).filter(Boolean)
+  command.replace(/[\w.-]+\(/g, '(').split(/&&|\|\||[;|\n]|\$\(|`|\(|\)/).map(s => s.trim().replace(/^(sudo|command|exec|time|nohup)\s+/, '')).filter(Boolean)
 
 // These touch a credential file without printing what is in it.
 const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown', 'rm'])
 
 export const secretCommand = (command: string, home: string): string | undefined => {
+  // A script that prints the whole environment is printenv by another name.
+  if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(command)) return 'printing the whole environment prints secrets'
   for (const seg of segments(command)) {
     if (SECRET_COMMANDS.some(r => r.test(seg))) return `\`${seg.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
     const words = seg.split(/\s+|[<>]=?|=/).map(w => w.replace(/^["']|["']$/g, '')).filter(Boolean)
