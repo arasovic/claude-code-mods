@@ -28,7 +28,7 @@ claude plugin install <mod>@claude-code-mods
 
 Restart Claude Code after installing. Update later with `claude plugin marketplace update claude-code-mods` and `claude plugin update <mod>@claude-code-mods`.
 
-Tested on Claude Code 2.1.287. Mods are a recent Claude Code feature, so older versions will not load them.
+Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them.
 
 ## Develop
 
