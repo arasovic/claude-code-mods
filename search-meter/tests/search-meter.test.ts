@@ -11,10 +11,10 @@ test('search commands are told apart from other commands', () => {
 })
 
 test('a find right after a miss took several tries', () => {
-  expect(outcome(true, undefined)).toBe('fast')
-  expect(outcome(true, 'fast')).toBe('fast')
-  expect(outcome(true, 'miss')).toBe('slow')
-  expect(outcome(true, 'slow')).toBe('fast')
+  expect(outcome(true, undefined)).toBe('first')
+  expect(outcome(true, 'first')).toBe('first')
+  expect(outcome(true, 'miss')).toBe('retry')
+  expect(outcome(true, 'retry')).toBe('first')
   expect(outcome(false, 'miss')).toBe('miss')
   expect(webFound(['no results', { tool_use_id: 'a', content: [] }])).toBe(false)
   expect(webFound([{ tool_use_id: 'a', content: [{ title: 't', url: 'https://x.test' }] }])).toBe(true)
@@ -22,5 +22,5 @@ test('a find right after a miss took several tries', () => {
 
 test('the status line counts each color and shows the last searches', () => {
   expect(statusText([])).toBeUndefined()
-  expect(statusText(['fast', 'miss', 'fast', 'slow', 'fast', 'fast', 'miss'])).toBe('🔍 🟢 4 🟡 1 🔴 2 · last 🟢🟡🟢🟢🔴')
+  expect(statusText(['first', 'miss', 'first', 'retry', 'first', 'first', 'miss'])).toBe('🔍 🟢 4 🟡 1 🔴 2 · last 🟢🟡🟢🟢🔴')
 })
