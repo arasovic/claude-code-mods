@@ -1,6 +1,6 @@
 {
   "name": "image-peek",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows the images you paste: thumbnails above the prompt, and larger pictures under each sent message in the chat",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",

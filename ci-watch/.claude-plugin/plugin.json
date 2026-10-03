@@ -1,6 +1,6 @@
 {
   "name": "ci-watch",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Watch GitHub Actions in a band above the prompt after Claude pushes, opens a PR or pushes a tag: a progress bar per run, then pass or fail; optionally flag failed scheduled workflows at start",
   "author": {
     "name": "Mehmet Aras",

@@ -36,6 +36,8 @@ test('every mermaid fence is extracted, other fences are not', () => {
 test('the PNG size comes from the IHDR chunk', () => {
   const header = String.fromCharCode(137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 2, 200, 0, 0, 0, 120)
   expect(pngSize(btoa(header))).toEqual({ width: 712, height: 120 })
+  expect(pngSize(btoa('GIF89a' + header.slice(6)))).toBeUndefined()
+  expect(pngSize(btoa(header.slice(0, 12)))).toBeUndefined()
 })
 
 test('the image keeps its aspect within the pane', () => {

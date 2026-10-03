@@ -137,8 +137,6 @@ const READ_HINT = 'Do not try another way to read it. Use a template such as .en
 const SEND_HINT = 'Take the secret out of the call. If the step needs it, ask the user to run it themselves.'
 const WRITE_HINT = 'That would replace the real value in the file. Edit only the lines you need and leave hidden values untouched, or ask the user to make the change.'
 
-const denied = (reason: string, hint = READ_HINT) => `secret-guard: ${reason}. ${hint}`
-
 // Module state starts over on reload; the counts are this load's.
 const tally = { hidden: 0, blocked: 0, scrubOff: true }
 let home = ''
@@ -163,10 +161,10 @@ export const register: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     const args = e as Record<string, unknown>
-    const deny = (reason: string, hint?: string) => {
+    const deny = (reason: string, hint = READ_HINT) => {
       tally.blocked++
       show($)
-      return { deny: denied(reason, hint) }
+      return { deny: `secret-guard: ${reason}. ${hint}` }
     }
 
     const pathKey = FILE_TOOLS[e.tool]

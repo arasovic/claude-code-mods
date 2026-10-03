@@ -70,7 +70,7 @@ async function lastSuccessMs($: EngineInterface, cwd: string, workflowId: number
 }
 
 async function setItem($: EngineInterface, item: CiWatchItem) {
-  await update($, watches, list => [...(list ?? []).filter(w => w.id !== item.id), item])
+  await update($, watches, list => [...list.filter(w => w.id !== item.id), item])
 }
 
 const copy = (w: CiWatchSpec): CiWatchSpec => ({ ...w, labels: [...w.labels], required: { ...w.required } })
@@ -172,7 +172,7 @@ async function track($: EngineInterface, command: string, result: BashResult) {
 // A reload drops the old module's timers; an unfinished row resumes from its spec, one without a spec would stay frozen and is dropped.
 async function resumeWatches($: EngineInterface) {
   const list = await read($, watches)
-  if (list.some(w => !w.result && !w.spec)) await update($, watches, l => (l ?? []).filter(w => w.result || w.spec))
+  if (list.some(w => !w.result && !w.spec)) await update($, watches, l => l.filter(w => w.result || w.spec))
   for (const w of list) {
     if (!w.result && w.spec) await watch($, w.spec, true)
   }
@@ -229,7 +229,7 @@ export const register: Register = (on, options) => {
 
   // A finished watch stays in the band until the person sends their next prompt.
   on('prompt.submit', async ($, e, next) => {
-    if ((await read($, watches)).some(w => w.result)) await update($, watches, list => (list ?? []).filter(w => !w.result))
+    if ((await read($, watches)).some(w => w.result)) await update($, watches, list => list.filter(w => !w.result))
     return next(e)
   })
 

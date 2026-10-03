@@ -14,9 +14,13 @@ export const extractMermaid = (text: string) => [...text.matchAll(/^```mermaid[^
 
 const titleOf = (source: string) => source.split('\n').find(l => l.trim() && !l.trim().startsWith('%%'))?.trim() ?? 'diagram'
 
-// Width and height from the PNG's IHDR chunk: bytes 16-23, big-endian.
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10]
+
+// Width and height from the PNG's IHDR chunk: bytes 16-23, big-endian. Anything that is not a PNG gives undefined.
 export const pngSize = (base64: string) => {
-  const v = new DataView(Uint8Array.from(atob(base64.slice(0, 32)), c => c.charCodeAt(0)).buffer)
+  const bytes = Uint8Array.from(atob(base64.slice(0, 32)), c => c.charCodeAt(0))
+  if (bytes.length < 24 || PNG_SIGNATURE.some((b, i) => bytes[i] !== b)) return undefined
+  const v = new DataView(bytes.buffer)
   return { width: v.getUint32(16), height: v.getUint32(20) }
 }
 
@@ -88,7 +92,8 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
       if (error) return { turnId, title, source, error }
       const png = `${dir}/out-${i + 1}.png`
       const bytes = await $.fs.read(png, { as: 'bytes' }).catch(() => null)
-      return bytes ? { turnId, title, source, png, ...pngSize(bytes.base64) } : { turnId, title, source, error: `mmdc wrote no ${png}` }
+      const size = bytes && pngSize(bytes.base64)
+      return size ? { turnId, title, source, png, ...size } : { turnId, title, source, error: `mmdc wrote no valid PNG at ${png}` }
     }),
   )
 }
