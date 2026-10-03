@@ -8,62 +8,62 @@
     {
       "name": "session-meter",
       "source": "./session-meter",
-      "description": "Live session pane (/ctx): context, limits, tool calls, model requests; a one-time note to the model when limits or context cross a threshold"
+      "description": "Live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; a one-time note to the model when limits or context cross a threshold"
     },
     {
       "name": "turn-footer",
       "source": "./turn-footer",
-      "description": "A turn summary under each answer (tools, requests, tokens, cache hit) and the running tool in the spinner"
+      "description": "Turns the line under each answer into a turn summary (tools, requests, tokens, cache hit) and shows the running tool in the spinner"
     },
     {
       "name": "change-ledger",
       "source": "./change-ledger",
-      "description": "A pane (/changes) listing the files this session edited, beside the git working tree"
+      "description": "A pane (/changes) listing the files this session edited with line counts and who edited them, beside the git working tree"
     },
     {
       "name": "turn-timeline",
       "source": "./turn-timeline",
-      "description": "A pane (/timeline) drawing the current turn as a timeline of model requests and tool calls per loop"
+      "description": "A pane (/timeline) drawing the current turn as a timeline: model requests and tool calls per loop, where the time went, and the slowest steps"
     },
     {
       "name": "compact-keeper",
       "source": "./compact-keeper",
-      "description": "Save each compaction's summary, session id and edited files to ~/.claude/handoffs"
+      "description": "Saves each compaction's summary, with the files edited before it, to ~/.claude/handoffs so the context before /compact can be recovered"
     },
     {
       "name": "show-me",
       "source": "./show-me",
-      "description": "Draw the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal"
+      "description": "Draw the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal such as Ghostty"
     },
     {
       "name": "secret-guard",
       "source": "./secret-guard",
-      "description": "Hide API keys and private keys before the model or the transcript sees them; block reads of credential files and commands that print secrets"
+      "description": "Keeps secrets out of the conversation: hides API keys and private keys before the model or the transcript sees them, and blocks reads of credential files and commands that print secrets"
     },
     {
       "name": "cache-timer",
       "source": "./cache-timer",
-      "description": "Count down to when the prompt cache expires, so the next message goes out before the whole conversation is cached again"
+      "description": "Counts down to when the prompt cache expires, so you can send the next message before the whole conversation has to be cached again"
     },
     {
       "name": "search-meter",
       "source": "./search-meter",
-      "description": "Count the model's searches and color each one: green found first try, yellow found after misses, red found nothing"
+      "description": "Counts the model's searches and colors each one: green found first try, yellow found after misses, red found nothing"
     },
     {
       "name": "loop-guard",
       "source": "./loop-guard",
-      "description": "Tell the model, out of the user's sight, to stop when the same call fails twice with the same error"
+      "description": "Tells the model, out of the user's sight, to stop when the same call fails twice with the same error"
     },
     {
       "name": "image-peek",
       "source": "./image-peek",
-      "description": "Show pasted images: thumbnails above the prompt, and larger pictures under each sent message; needs a kitty-graphics terminal"
+      "description": "Shows the images you paste: thumbnails above the prompt, and larger pictures under each sent message in the chat; needs a kitty-graphics terminal such as Ghostty"
     },
     {
       "name": "guardrails",
       "source": "./guardrails",
-      "description": "Block Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names"
+      "description": "Blocks Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names"
     },
     {
       "name": "pin-board",
