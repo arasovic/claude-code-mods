@@ -2,6 +2,8 @@
 
 Pin standing notes with `/pin`. Claude keeps following them after `/compact` and `/clear`, and you see them above the prompt. Pins you keep come back after a restart.
 
+<img src="../docs/pin-board.png" alt="Two pins in one row above the prompt" width="542">
+
 ## Use
 
 - `/pin <note>`: pins a note.
@@ -16,6 +18,8 @@ A pin lasts until you quit Claude Code. A kept pin is stored for the folder you 
 All pins share one row above the prompt, numbered for `/unpin`: `📌 1 use pnpm · 2 no force push`. A long row is cut at the edge; `/pin` lists them in full.
 
 If that band is already busy, set **Where pins show** to `counter` in `/config`. Then only the number shows, at the right end of the line under the prompt: `📌 2 pins`.
+
+<img src="../docs/pin-board-counter.png" alt="The pin counter at the right end of the line under the prompt" width="698">
 
 ## How Claude gets them
 
