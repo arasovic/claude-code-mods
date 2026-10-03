@@ -7,8 +7,9 @@ import type { CiWatchItem } from '../types'
 const ok = (data: unknown) => ({ value: { exitCode: 0, stdout: typeof data === 'string' ? data : JSON.stringify(data), stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
 // Session cwd, state by key and toasts, shared by the watch tests.
-const harness = (on: On, initial: Record<string, unknown> = {}, now = 0) => {
+const harness = (on: On, initial: Record<string, unknown> = {}, now = 0, hasWorkflows = true) => {
   const clock = mock.clock(on, { now })
+  on('fs.exists', () => ({ value: hasWorkflows }))
   mock.env(on, { HOME: '/home/a' })
   on('session.cwd', () => ({ value: '/repo' }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -164,6 +165,18 @@ test('a push or PR in another repo is not watched', async ($, on) => {
   await $.tool.call({ tool: 'Bash', command: 'gh pr create --fill' })
   await clock.settle()
   expect(argvs.filter(a => !a.startsWith('gh repo view'))).toEqual([])
+  expect(held.watches).toBeUndefined()
+})
+
+test('a repo without .github/workflows is not watched', async ($, on) => {
+  const { clock, held } = harness(on, {}, 0, false)
+  const argvs: string[] = []
+  on('process.run', (_$, e) => (argvs.push(e.argv.join(' ')), ok('')))
+  on('tool.call', () => ({ result: { stdout: '', stderr: '', interrupted: false, gitOperation: { push: { branch: 'main' } } } }) as never)
+
+  await $.tool.call({ tool: 'Bash', command: 'git push' })
+  await clock.advance(100_000)
+  expect(argvs).toEqual([])
   expect(held.watches).toBeUndefined()
 })
 

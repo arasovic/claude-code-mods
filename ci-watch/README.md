@@ -12,7 +12,7 @@ See GitHub Actions finish without leaving Claude Code. After Claude pushes a bra
 
 A push and the PR opened on that branch share one row, and it waits for both sets of runs. A push to a branch with an open PR also waits for its `pull_request` runs. A tag push waits for the runs on that tag, not the branch CI that already ran on the same commit.
 
-Only the repo Claude Code was started in is watched. A push from `cd <other repo> && git push` or `git -C <other repo>` is left alone.
+Only the repo Claude Code was started in is watched, and only when it has a `.github/workflows` folder. A push from `cd <other repo> && git push` or `git -C <other repo>` is left alone.
 
 ## Failed scheduled workflows
 

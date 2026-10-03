@@ -144,6 +144,9 @@ async function track($: EngineInterface, command: string, result: BashResult) {
   const root = await $.session.cwd()
   const cwd = repoDir(command, (await $.env.get('HOME')) ?? '', root)
   if (!isInside(cwd, root)) return
+  // A repo without workflows would only end in "no workflow triggered".
+  // ponytail: looks at the session cwd; a session started in a subfolder of the repo is not watched.
+  if (!(await $.fs.exists(`${root}/.github/workflows`))) return
   const startedAt = await $.clock.now()
   const spec = (sha: string, ref: string, label: string, events: string[]): CiWatchSpec => ({
     cwd: root, sha, ref, labels: [label], required: Object.fromEntries(events.map(ev => [ev, startedAt])), startedAt,
