@@ -86,6 +86,12 @@ Small lines in the places you already look: above the prompt, under it, and unde
 
 <img src="docs/pin-board.png" alt="Two pins in one row above the prompt" width="542">
 
+### [ci‑watch](ci-watch/README.md)
+
+**CI results without leaving the terminal.** After Claude pushes, opens a PR or pushes a tag, each GitHub Actions run gets a progress bar above the prompt, then a green or red result. It can also flag scheduled workflows that failed while you were away.
+
+<img src="docs/ci-watch.png" alt="A CI run with its progress bar, then the passed result" width="556">
+
 ### [cache‑timer](cache-timer/README.md)
 
 **Send your next message while the cache is still warm.** A countdown to when the prompt cache expires. Once it has, the line shows how many tokens the next message writes to the cache again.
@@ -160,7 +166,7 @@ curl -s https://raw.githubusercontent.com/arasovic/claude-code-mods/main/.claude
 
 Restart Claude Code after installing. Update later with `claude plugin marketplace update claude-code-mods` and `claude plugin update <mod>@claude-code-mods`.
 
-Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`.
+Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`, and ci-watch needs [`gh`](https://cli.github.com), logged in.
 
 ## Develop
 
