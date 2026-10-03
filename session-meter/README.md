@@ -2,7 +2,7 @@
 
 A docked pane that shows what is happening in a Claude Code session while you work.
 
-![session-meter docked beside a Claude Code session](../docs/showcase.png)
+![The session-meter pane with context, limits, tools and requests](../docs/session-meter.png)
 
 ## What it shows
 
@@ -10,8 +10,6 @@ A docked pane that shows what is happening in a Claude Code session while you wo
 - **Limits**: the 5-hour and 7-day usage windows, time to reset, and whether the current pace lasts until the reset.
 - **Tools**: recent tool calls with their target and duration; running calls stay on top, subagent calls are marked `↳`.
 - **Requests**: each model request with its loop (main or subagent type), input and output tokens, cache hit rate and duration. A low cache rate turns yellow or red.
-
-<img src="../docs/session-meter.png" alt="Close-up of the session-meter pane" width="420">
 
 ## The note to the model
 
