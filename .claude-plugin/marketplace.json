@@ -51,6 +51,11 @@
       "name": "loop-guard",
       "source": "./loop-guard",
       "description": "Tell the model, out of the user's sight, to stop when the same call fails twice with the same error"
+    },
+    {
+      "name": "image-peek",
+      "source": "./image-peek",
+      "description": "Show pasted images: thumbnails above the prompt, and larger pictures under each sent message; needs a kitty-graphics terminal"
     }
   ]
 }

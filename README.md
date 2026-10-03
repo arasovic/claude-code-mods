@@ -18,6 +18,7 @@ Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins th
 | [cache‑timer](cache-timer/README.md) | A countdown above the prompt to when the prompt cache expires, and how many tokens the next message re-caches once it has |
 | [search‑meter](search-meter/README.md) | A line under the prompt counting the model's searches by color: green found first try, yellow found after misses, red found nothing |
 | [loop‑guard](loop-guard/README.md) | A hidden note to the model when the same call fails twice with the same error: stop repeating it and change approach |
+| [image‑peek](image-peek/README.md) | Thumbnails of the images you paste above the prompt, and larger pictures under each sent message in the chat |
 
 ## Install
 
