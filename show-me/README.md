@@ -37,7 +37,7 @@ Restart Claude Code and type `/show-me how does this request flow through the ap
 ## Notes
 
 - The pane opens by itself only when the terminal is at least 144 columns wide. Below that a toast says how many diagrams are ready; `/show-me` opens the pane.
-- Images are written under `$TMPDIR/show-me/`, one folder per turn. Each render deletes the turn folders older than a day.
+- Images are written under `$TMPDIR/show-me/`, one folder per turn. Each render deletes the turn folders older than a day, except the ones the history still shows.
 - Subagent answers are ignored; only the main conversation's diagrams are drawn.
 
 ## Develop

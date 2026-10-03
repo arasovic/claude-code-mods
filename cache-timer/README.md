@@ -23,7 +23,7 @@ So the timer helps most on 5 minutes, where a coffee break is enough to lose the
 A line just above the prompt, counting from the last request of the main conversation. It sits apart from the status lines under the prompt, so its tick every second does not shuffle them:
 
 - 🟢 `cache 54:12`: the cache is warm.
-- 🟡 `cache 0:48 · send soon`: less than a fifth of its life is left.
+- 🟡 `cache 0:48 · send soon`: a fifth of its life or less is left.
 - 🔴 `cache cold · next message re-writes 182k tokens`: it has expired; the number is how much the next message caches again.
 
 Subagent requests do not count; they do not keep the main conversation's cache alive. The line clears after `/clear` and `/compact`, since the next message writes a new cache either way.
