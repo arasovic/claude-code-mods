@@ -75,9 +75,10 @@ test('commands that read credential files or print secrets are caught', () => {
 
 test('code that names env is not a credential file, a whole-env dump is still caught', () => {
   for (const c of ['grep -n "mock.env(on" tests/a.test.ts', 'grep -rn process.env src', 'rg "import.meta.env" app', 'grep -rn c.env worker',
-    `node -e 'console.log(process.env.HOME)'`, 'echo "x" | sed s/a.env(/b/'])
+    `node -e 'console.log(process.env.HOME)'`, 'echo "x" | sed s/a.env(/b/', `python3 - <<'EOF'\nstore.get(e.key)\nEOF`, 'grep -n event.key src'])
     expect(secretCommand(c, HOME)).toBeUndefined()
-  for (const c of [`node -e 'console.log(process.env)'`, `python3 -c 'print(os.environ)'`, 'cat prod.env', 'cat $(echo .env)', 'cat .env$(true)'])
+  for (const c of [`node -e 'console.log(process.env)'`, `python3 -c 'print(os.environ)'`, 'cat prod.env', 'cat $(echo .env)', 'cat .env$(true)',
+    'cat server.key', 'cat certs/e.key', 'cat ./e.key'])
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 

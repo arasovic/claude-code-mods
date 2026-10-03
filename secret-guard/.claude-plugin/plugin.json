@@ -1,6 +1,6 @@
 {
   "name": "secret-guard",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Keeps secrets out of the conversation: hides API keys and private keys before the model or the transcript sees them, and blocks reads of credential files and commands that print secrets",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
