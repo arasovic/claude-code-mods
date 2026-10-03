@@ -1,6 +1,9 @@
 {
   "name": "claude-code-mods",
-  "owner": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
+  "owner": {
+    "name": "Mehmet Aras",
+    "url": "https://github.com/arasovic"
+  },
   "plugins": [
     {
       "name": "session-meter",
@@ -61,6 +64,11 @@
       "name": "guardrails",
       "source": "./guardrails",
       "description": "Block Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names"
+    },
+    {
+      "name": "pin-board",
+      "source": "./pin-board",
+      "description": "Pin standing notes with /pin: Claude keeps following them after /compact and /clear; shown in one row above the prompt or as a counter, kept per folder with --keep"
     }
   ]
 }

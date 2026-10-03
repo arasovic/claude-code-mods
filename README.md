@@ -80,6 +80,10 @@ Small lines in the places you already look: above the prompt, under it, and unde
   </tr>
 </table>
 
+### [pin‑board](pin-board/README.md)
+
+**Notes Claude keeps following.** `/pin use pnpm, never npm` pins a note in one row above the prompt, or as a counter under it. Claude gets it at once, and again after `/compact` and `/clear`. Add `--keep` to keep it for the folder across restarts.
+
 ### [cache‑timer](cache-timer/README.md)
 
 **Send your next message while the cache is still warm.** A countdown to when the prompt cache expires. Once it has, the line shows how many tokens the next message writes to the cache again.

@@ -1,0 +1,24 @@
+{
+  "name": "pin-board",
+  "version": "0.1.0",
+  "description": "Pin standing notes with /pin: Claude keeps following them after /compact and /clear; shown in one row above the prompt or as a counter, kept per folder with --keep",
+  "author": {
+    "name": "Mehmet Aras",
+    "url": "https://github.com/arasovic"
+  },
+  "repository": "https://github.com/arasovic/claude-code-mods",
+  "license": "MIT",
+  "userConfig": {
+    "display": {
+      "type": "string",
+      "title": "Where pins show",
+      "description": "band: the pins in one row above the prompt. counter: only their number, at the right end of the line under the prompt.",
+      "required": false,
+      "default": "band",
+      "options": [
+        "band",
+        "counter"
+      ]
+    }
+  }
+}
