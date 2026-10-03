@@ -19,6 +19,7 @@ Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins th
 | [search‑meter](search-meter/README.md) | A line under the prompt counting the model's searches by color: green found first try, yellow found after misses, red found nothing |
 | [loop‑guard](loop-guard/README.md) | A hidden note to the model when the same call fails twice with the same error: stop repeating it and change approach |
 | [image‑peek](image-peek/README.md) | Thumbnails of the images you paste above the prompt, and larger pictures under each sent message in the chat |
+| [guardrails](guardrails/README.md) | Blocks Cloudflare write commands, attribution lines in commits and PRs, and `claude/` branch names |
 
 ## Install
 

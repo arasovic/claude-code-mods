@@ -56,6 +56,11 @@
       "name": "image-peek",
       "source": "./image-peek",
       "description": "Show pasted images: thumbnails above the prompt, and larger pictures under each sent message; needs a kitty-graphics terminal"
+    },
+    {
+      "name": "guardrails",
+      "source": "./guardrails",
+      "description": "Block Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names"
     }
   ]
 }
