@@ -1,7 +1,7 @@
 {
   "name": "search-meter",
   "version": "0.1.0",
-  "description": "Counts the model's searches and colors each one: green found fast, yellow found slowly, red found nothing",
+  "description": "Counts the model's searches and colors each one: green found first try, yellow found after misses, red found nothing",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
   "license": "MIT"

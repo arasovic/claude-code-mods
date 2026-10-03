@@ -16,7 +16,7 @@ Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins th
 | [show‑me](show-me/README.md) | A pane drawing the mermaid diagrams of each answer as images; `/show-me <question>` asks for an answer in diagrams |
 | [secret‑guard](secret-guard/README.md) | Hides API keys and private keys before the model or the transcript sees them, blocks reads of credential files and commands that print secrets, and shows a status light |
 | [cache‑timer](cache-timer/README.md) | A countdown above the prompt to when the prompt cache expires, and how many tokens the next message re-caches once it has |
-| [search‑meter](search-meter/README.md) | A line under the prompt counting the model's searches by color: green found fast, yellow found slowly, red found nothing |
+| [search‑meter](search-meter/README.md) | A line under the prompt counting the model's searches by color: green found first try, yellow found after misses, red found nothing |
 | [loop‑guard](loop-guard/README.md) | A hidden note to the model when the same call fails twice with the same error: stop repeating it and change approach |
 
 ## Install

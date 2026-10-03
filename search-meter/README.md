@@ -8,8 +8,8 @@ Counts the searches Claude runs and colors each one, so you can see how many sea
 
 A line under the prompt, from the first search on: `🔍 🟢 8 🟡 2 🔴 3 · last 🟢🟡🟢🟢🔴`.
 
-- 🟢 found something fast.
-- 🟡 found something, slowly: over 3 seconds for a local search, over 10 seconds for a web search.
+- 🟢 found something on the first try.
+- 🟡 found something after one or more searches that found nothing.
 - 🔴 found nothing.
 - `last` shows the five most recent searches, oldest first.
 
@@ -23,7 +23,7 @@ The counts cover the whole session, subagents included, and start over on `/clea
 
 ## Limits
 
-- The time is the whole call, so a permission prompt you leave open makes a search look slow.
+- Searches are not grouped by what they look for: a find right after an unrelated miss counts as 🟡. Subagent searches run between the main thread's searches.
 - Output decides, not meaning: `grep -c` printing `0` counts as found, and `grep -q` counts as found nothing. A command that also prints something else (`ls && grep x`) counts as found.
 - Searches that were refused, interrupted or sent to the background are not counted.
 - Builds that have separate `Grep` and `Glob` tools are not counted yet; 2.1.288 searches through the shell.
