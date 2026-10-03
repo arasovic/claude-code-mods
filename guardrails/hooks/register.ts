@@ -4,7 +4,7 @@ import type { Register } from 'claude-code'
 const FORBIDDEN = [
   { re: /\bcf\s+(deploy|migrate|init)\b/, why: 'cf write commands are never run by Claude; deploys stay on the Wrangler flow.' },
   { re: /\b(git\s+commit|gh\s+(pr|issue))\b[\s\S]*(Co-Authored-By|Generated with \[?Claude)/i, why: 'Remove the Co-Authored-By / tool-attribution line and retry.' },
-  { re: /\bgit\s+(checkout\s+-b|switch\s+-c|branch|push)\b[^|;&]*\sclaude\//, why: 'Branches never use the claude/ prefix; use fix/, style/, chore/ etc.' },
+  { re: /\bgit\s+(checkout\s+-b|switch\s+-c|branch|push)\b[^|;&]*(?:[\s:+]|refs\/heads\/)claude\//, why: 'Branches never use the claude/ prefix; use fix/, style/, chore/ etc.' },
 ]
 // ponytail: matches command text only; `git commit -F file`, aliases and scripts slip through. Permission deny rules for hard guarantees.
 

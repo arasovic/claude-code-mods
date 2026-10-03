@@ -1,6 +1,6 @@
 {
   "name": "guardrails",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Blocks Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",

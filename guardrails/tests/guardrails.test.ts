@@ -7,8 +7,12 @@ test('forbidden commands', () => {
   expect(forbiddenReason('git commit -m "fix\n\nCo-Authored-By: Claude <x@y>"')).toBeDefined()
   expect(forbiddenReason('gh pr create --body "Generated with [Claude Code](https://claude.com)"')).toBeDefined()
   expect(forbiddenReason('git checkout -b claude/fix-x')).toBeDefined()
+  expect(forbiddenReason('git push origin HEAD:claude/x')).toBeDefined()
+  expect(forbiddenReason('git push origin HEAD:refs/heads/claude/x')).toBeDefined()
+  expect(forbiddenReason('git push origin +claude/x')).toBeDefined()
   expect(forbiddenReason('git commit -m "fix: typo"')).toBeUndefined()
   expect(forbiddenReason('git checkout -b fix/claude-x')).toBeUndefined()
+  expect(forbiddenReason('git push origin HEAD:fix/claude-x')).toBeUndefined()
   expect(forbiddenReason('grep -r "Co-Authored-By" .')).toBeUndefined()
 })
 
