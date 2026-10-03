@@ -1,25 +1,139 @@
-# claude-code-mods
+<p align="center">
+  <img src="docs/banner.png" alt="claude-code-mods: mods that draw inside Claude Code">
+</p>
 
-![claude-code-mods: mods that draw inside Claude Code](docs/banner.png)
+<p align="center">
+  Mods for <a href="https://claude.com/claude-code">Claude Code</a> that add panes, live lines and guards to the terminal you already work in.<br>
+  Install one, or all of them.
+</p>
 
-Mods for [Claude Code](https://claude.com/claude-code): function-hook plugins that draw inside the terminal UI.
+<p align="center">
+  <img src="https://img.shields.io/badge/tested_on-Claude_Code_2.1.288-a8a6ff?style=flat-square" alt="Tested on Claude Code 2.1.288">
+  <img src="https://img.shields.io/badge/license-MIT-3a3a46?style=flat-square" alt="MIT license">
+</p>
 
-## Mods
+<p align="center">
+  <a href="#panes-beside-the-chat">Panes beside the chat</a>&emsp;
+  <a href="#lines-in-the-chat">Lines in the chat</a>&emsp;
+  <a href="#guards-that-work-out-of-sight">Guards</a>&emsp;
+  <a href="#install">Install</a>
+</p>
 
-| Mod | What it does |
-| --- | --- |
-| [session‑meter](session-meter/README.md) | A docked pane with context usage, 5h/7d limits and pace, live tool calls and model requests; a one-time note to the model when limits or context run high |
-| [turn‑footer](turn-footer/README.md) | A summary line under each answer (tools, requests, tokens, cache hit) and the running tool with its clock in the spinner |
-| [change‑ledger](change-ledger/README.md) | A pane listing the files this session edited, with line counts and which agent edited them, beside the git working tree |
-| [turn‑timeline](turn-timeline/README.md) | A pane drawing the current turn as a timeline of model requests and tool calls per loop, with where the time went |
-| [compact‑keeper](compact-keeper/README.md) | Saves each compaction's summary, session id and edited files to `~/.claude/handoffs`, so nothing before `/compact` is lost |
-| [show‑me](show-me/README.md) | A pane drawing the mermaid diagrams of each answer as images; `/show-me <question>` asks for an answer in diagrams |
-| [secret‑guard](secret-guard/README.md) | Hides API keys and private keys before the model or the transcript sees them, blocks reads of credential files and commands that print secrets, and shows a status light |
-| [cache‑timer](cache-timer/README.md) | A countdown above the prompt to when the prompt cache expires, and how many tokens the next message re-caches once it has |
-| [search‑meter](search-meter/README.md) | A line under the prompt counting the model's searches by color: green found first try, yellow found after misses, red found nothing |
-| [loop‑guard](loop-guard/README.md) | A hidden note to the model when the same call fails twice with the same error: stop repeating it and change approach |
-| [image‑peek](image-peek/README.md) | Thumbnails of the images you paste above the prompt, and larger pictures under each sent message in the chat |
-| [guardrails](guardrails/README.md) | Blocks Cloudflare write commands, attribution lines in commits and PRs, and `claude/` branch names |
+```sh
+claude plugin marketplace add arasovic/claude-code-mods
+claude plugin install session-meter@claude-code-mods
+```
+
+<br>
+
+## Panes beside the chat
+
+Panes dock on the right of the session. Open them with `/ctx`, `/changes`, `/timeline` and `/show-me`; from 144 columns, session-meter opens on its own and show-me opens when an answer has a diagram.
+
+<table>
+  <tr>
+    <td width="55%"><img src="docs/session-meter.png" alt="The session-meter pane with context, limits, tools and requests"></td>
+    <td>
+      <h3><a href="session-meter/README.md">session‑meter</a></h3>
+      <p><b>See what fills your context and how fast your limits drain.</b></p>
+      <p>Context by category, the 5-hour and 7-day windows with their pace, every tool call and every model request with its cache hit rate. When limits or context run high, the model gets one short note.</p>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <h3><a href="change-ledger/README.md">change‑ledger</a></h3>
+      <p><b>Every file this session touched, in one list.</b></p>
+      <p>Lines added and removed, which agent edited each file, and how long ago. Below it, the git working tree, so edits made outside the session stand out.</p>
+    </td>
+    <td width="55%"><img src="docs/change-ledger.png" alt="The change-ledger pane listing edited files with line counts, above the git working tree"></td>
+  </tr>
+  <tr>
+    <td width="55%"><img src="docs/turn-timeline.png" alt="The turn-timeline pane with a timeline, time breakdown and slowest steps"></td>
+    <td>
+      <h3><a href="turn-timeline/README.md">turn‑timeline</a></h3>
+      <p><b>Where did this turn's time go?</b></p>
+      <p>The current turn as a timeline: one lane for the main loop and one per subagent, the split between model, tools and idle, and the three slowest steps.</p>
+    </td>
+  </tr>
+</table>
+
+### [show‑me](show-me/README.md)
+
+**Diagrams as pictures, not as code.** Each mermaid diagram in an answer is drawn in a pane once the turn ends. `/show-me <question>` asks for an answer in diagrams.
+
+<img src="docs/show-me.png" alt="The show-me pane drawing a flowchart from an answer, with keys to step through, open and close">
+
+<br>
+
+## Lines in the chat
+
+Small lines in the places you already look: above the prompt, under it, and under each answer.
+
+### [image‑peek](image-peek/README.md)
+
+**See the images you paste, not just `[Image #1]`.** Thumbnails above the prompt while you write, larger pictures under the message once it is sent.
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/image-peek-draft.png" alt="Thumbnails of two pasted images above the prompt"><br><sub>While you write</sub></td>
+    <td width="50%" valign="top"><img src="docs/image-peek.png" alt="The same two images, larger, under the sent message"><br><sub>After you send</sub></td>
+  </tr>
+</table>
+
+### [cache‑timer](cache-timer/README.md)
+
+**Send your next message while the cache is still warm.** A countdown to when the prompt cache expires. Once it has, the line shows how many tokens the next message writes to the cache again.
+
+<img src="docs/cache-timer.png" alt="cache-timer's band above the prompt">
+
+### [turn‑footer](turn-footer/README.md)
+
+**What each answer cost, in one line.** Tool calls, subagents, requests, tokens and cache hit rate under every answer, and the running tool with its clock in the spinner.
+
+<img src="docs/turn-footer.png" alt="A turn summary line under the Worked for line" width="554">
+
+### [search‑meter](search-meter/README.md)
+
+**How many searches went to waste.** Green found on the first try, yellow found after misses, red found nothing.
+
+<img src="docs/search-meter.png" alt="search-meter's status line" width="416">
+
+<br>
+
+## Guards that work out of sight
+
+These draw little or nothing. They step in when something goes wrong.
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <h3><a href="secret-guard/README.md">secret‑guard</a></h3>
+      <p><b>Keys never reach the model or the transcript.</b> API keys and private keys are hidden in tool output and in your own messages. Credential files cannot be opened, and commands that print secrets do not run. A status light shows what it caught.</p>
+      <img src="docs/secret-guard.png" alt="secret-guard's status light">
+    </td>
+    <td width="50%" valign="top">
+      <h3><a href="loop-guard/README.md">loop‑guard</a></h3>
+      <p><b>No third try of the same failing call.</b> When a call fails twice with the same error, the model is told to stop, re-read the error and change approach. A toast tells you.</p>
+      <img src="docs/loop-guard.png" alt="loop-guard's toast after a repeated failure">
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <h3><a href="guardrails/README.md">guardrails</a></h3>
+      <p><b>Blocks the commands you never want run.</b> Cloudflare writes, attribution lines in commits and PRs, and <code>claude/</code> branch names. Claude gets the reason back and retries the right way.</p>
+      <pre>guardrails: Branches never use the claude/ prefix;
+use fix/, style/, chore/ etc.</pre>
+    </td>
+    <td width="50%" valign="top">
+      <h3><a href="compact-keeper/README.md">compact‑keeper</a></h3>
+      <p><b>Nothing is lost to <code>/compact</code>.</b> Each compaction's summary, session id, resume command and edited files are saved as one Markdown file.</p>
+      <pre>~/.claude/handoffs/
+  2026-10-03-0952-my-app-4f9c2a1e.md</pre>
+    </td>
+  </tr>
+</table>
+
+<br>
 
 ## Install
 
@@ -30,9 +144,17 @@ claude plugin marketplace add arasovic/claude-code-mods
 claude plugin install <mod>@claude-code-mods
 ```
 
+Or install all of them (needs `jq`):
+
+```sh
+curl -s https://raw.githubusercontent.com/arasovic/claude-code-mods/main/.claude-plugin/marketplace.json \
+  | jq -r '.plugins[].name' \
+  | while read -r mod; do claude plugin install "$mod@claude-code-mods"; done
+```
+
 Restart Claude Code after installing. Update later with `claude plugin marketplace update claude-code-mods` and `claude plugin update <mod>@claude-code-mods`.
 
-Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them.
+Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`.
 
 ## Develop
 
