@@ -36,7 +36,7 @@ Panes dock on the right of the session. Open them with `/ctx`, `/changes`, `/tim
     <td>
       <h3><a href="session-meter/README.md">session‑meter</a></h3>
       <p><b>See what fills your context and how fast your limits drain.</b></p>
-      <p>Context by category, the 5-hour and 7-day windows with their pace, every tool call and every model request with its cache hit rate. When limits or context run high, the model gets one short note.</p>
+      <p>Context by category, the 5-hour and 7-day windows with their pace, the last 30 tool calls and model requests, each request with its cache hit rate. When limits or context run high, the model gets one short note.</p>
     </td>
   </tr>
   <tr>
