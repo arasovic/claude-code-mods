@@ -1,5 +1,6 @@
 {
   "name": "claude-code-mods",
+  "description": "Mods for Claude Code that add panes, live lines and guards to the terminal you already work in",
   "owner": {
     "name": "Mehmet Aras",
     "url": "https://github.com/arasovic"
@@ -8,7 +9,7 @@
     {
       "name": "session-meter",
       "source": "./session-meter",
-      "description": "Live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; a one-time note to the model when limits or context cross a threshold"
+      "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold"
     },
     {
       "name": "turn-footer",
@@ -18,12 +19,12 @@
     {
       "name": "change-ledger",
       "source": "./change-ledger",
-      "description": "A pane (/changes) listing the files this session edited with line counts and who edited them, beside the git working tree"
+      "description": "Lists the files this session edited in a pane (/changes), with line counts and who edited them, beside the git working tree"
     },
     {
       "name": "turn-timeline",
       "source": "./turn-timeline",
-      "description": "A pane (/timeline) drawing the current turn as a timeline: model requests and tool calls per loop, where the time went, and the slowest steps"
+      "description": "Draws the current turn as a timeline in a pane (/timeline): model requests and tool calls per loop, where the time went, and the slowest steps"
     },
     {
       "name": "compact-keeper",
@@ -33,7 +34,7 @@
     {
       "name": "show-me",
       "source": "./show-me",
-      "description": "Draw the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal such as Ghostty"
+      "description": "Draws the mermaid diagrams of each answer as images in a pane (/show-me); needs mmdc and a kitty-graphics terminal such as Ghostty"
     },
     {
       "name": "secret-guard",
@@ -68,12 +69,12 @@
     {
       "name": "pin-board",
       "source": "./pin-board",
-      "description": "Pin standing notes with /pin: Claude keeps following them after /compact and /clear; shown in one row above the prompt or as a counter, kept per folder with --keep"
+      "description": "Pins standing notes with /pin that Claude keeps following after /compact and /clear; shows them in one row above the prompt or as a counter, and keeps them per folder with --keep"
     },
     {
       "name": "ci-watch",
       "source": "./ci-watch",
-      "description": "Watch GitHub Actions in a band above the prompt after Claude pushes, opens a PR or pushes a tag: a progress bar per run, then pass or fail; optionally flag failed scheduled workflows at start"
+      "description": "Watches GitHub Actions in a band above the prompt after Claude pushes, opens a PR or pushes a tag: a progress bar per run, then pass or fail; optionally flags failed scheduled workflows at start"
     }
   ]
 }

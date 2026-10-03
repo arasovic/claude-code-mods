@@ -1,7 +1,7 @@
 {
   "name": "change-ledger",
-  "version": "0.1.1",
-  "description": "A pane (/changes) listing the files this session edited with line counts and who edited them, beside the git working tree",
+  "version": "0.1.2",
+  "description": "Lists the files this session edited in a pane (/changes), with line counts and who edited them, beside the git working tree",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
   "license": "MIT",
