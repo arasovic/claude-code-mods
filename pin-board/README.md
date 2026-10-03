@@ -1,6 +1,6 @@
 # pin-board
 
-Pin standing notes with `/pin`. Claude keeps following them after `/compact` and `/clear`, and you see them above the prompt. Pins you keep come back after a restart.
+Pins standing notes with `/pin`. Claude keeps following them after `/compact` and `/clear`, and you see them above the prompt, or as a counter under it. Pins you keep come back after a restart.
 
 <img src="../docs/pin-board.png" alt="Two pins in one row above the prompt" width="542">
 

@@ -1,6 +1,6 @@
 # change-ledger
 
-A pane that lists every file the session changed, next to the git working tree.
+A pane that lists the files the session edited, next to the git working tree.
 
 <img src="../docs/change-ledger.png" alt="The change-ledger pane listing edited files with line counts, above the git working tree" width="640">
 

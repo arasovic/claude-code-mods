@@ -1,6 +1,6 @@
 # ci-watch
 
-See GitHub Actions finish without leaving Claude Code. After Claude pushes a branch, opens a PR or pushes a tag, a band above the prompt shows each workflow run with a progress bar, then a toast says whether it passed.
+Shows GitHub Actions runs until they finish, without leaving Claude Code. After Claude pushes a branch, opens a PR or pushes a tag, a band above the prompt shows each workflow run with a progress bar, then whether it passed, also as a toast.
 
 <img src="../docs/ci-watch.png" alt="A CI run with its progress bar, then the passed result" width="556">
 
