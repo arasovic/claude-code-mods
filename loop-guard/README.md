@@ -10,14 +10,14 @@ When a tool call fails twice with the same arguments and the same error, loop-gu
 
 - The call must match: same tool, same arguments, same agent. A tool's `description` is left out, since Claude words it anew on each try. A subagent's failures count apart from the main thread's.
 - The error must match too. Running `npm test` again after a fix usually fails differently, so it is not flagged.
-- A success of the same call clears its record, and `/clear` clears them all.
-- Every further identical failure carries the note again.
+- The note and the toast go out once per call. After the call succeeds, a new pair of failures sends them again.
+- A success of the same call clears its record. `/clear` and an interrupted turn (Esc) clear them all, since a call you stop fails the same way each time.
 
 ## Limits
 
 - An error that carries a time or a random id differs each run, so it is never flagged.
-- A call you interrupt twice counts as the same error.
-- Refused calls are not counted.
+- Refused calls are not counted, and they do not clear a failure.
+- Only the last error of a call is kept: failing with A, then B, then A again sends no note.
 
 ## Install
 
