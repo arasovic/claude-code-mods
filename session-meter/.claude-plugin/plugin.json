@@ -1,9 +1,18 @@
 {
   "name": "session-meter",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "autoOpen": {
+      "type": "boolean",
+      "title": "Open the pane at start",
+      "description": "Open the session pane on its own when a session starts. Turn off to keep the screen clear; /ctx still opens it, and the notes to the model still go out.",
+      "required": false,
+      "default": true
+    }
+  }
 }

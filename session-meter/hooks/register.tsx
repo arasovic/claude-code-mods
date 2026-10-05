@@ -214,12 +214,12 @@ const agentLabel = async ($: EngineInterface, id: string | undefined) => {
   return type ?? 'fork'
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
     await refresh($)
     await sample($, (await read($, reading)).limits)
-    void $.ui.open({ id: PANE, title: 'Session' })
+    if (options.autoOpen !== false) void $.ui.open({ id: PANE, title: 'Session' })
     return next(e)
   })
 
