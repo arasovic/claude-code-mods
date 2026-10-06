@@ -79,7 +79,10 @@ function tiles({ Box, Image, Text }: Elements['terminal'], list: readonly Pictur
     <Box flexDirection="row" columnGap={1}>
       {list.map(p => (
         <Box key={`image-${p.n}`} flexDirection="column" alignItems="center" borderStyle="round" borderDimColor>
-          <Image source={{ file: p.path, format: 'png' }} {...fit(p.size, Math.max(1, share), rows)} alt={`[Image #${p.n}]`} />
+          {/* Tiles stretch to the row's tallest; a shorter picture sits in the middle, its label stays at the bottom. */}
+          <Box flexDirection="column" flexGrow={1} justifyContent="center">
+            <Image source={{ file: p.path, format: 'png' }} {...fit(p.size, Math.max(1, share), rows)} alt={`[Image #${p.n}]`} />
+          </Box>
           <Text dimColor>#{p.n}</Text>
         </Box>
       ))}
