@@ -50,13 +50,22 @@ for (const surface of ['terminal', 'desktop'] as const) {
     expect(await header()).toEqual(['3/3', 'turn 2/2'])
   })
 
-  test(`${surface}: a failed render shows its error and source, with no open button`, async ($, on) => {
-    engine(on, HISTORY.slice(0, 1))
-    const ui = await mount($)
-    expect(await ui.find({ text: 'boom' })).toBeDefined()
-    expect(await ui.find({ text: /a --> b/ })).toBeDefined()
-    expect(await ui.find({ key: 'open' })).toBeUndefined()
-  })
+  if (surface === 'terminal')
+    test(`${surface}: a failed render shows its error and source, with no open button`, async ($, on) => {
+      engine(on, HISTORY.slice(0, 1))
+      const ui = await mount($)
+      expect(await ui.find({ text: 'boom' })).toBeDefined()
+      expect(await ui.find({ text: /a --> b/ })).toBeDefined()
+      expect(await ui.find({ key: 'open' })).toBeUndefined()
+    })
+  else
+    test(`${surface}: the diagram is a mermaid fence the surface draws, whatever mmdc did`, async ($, on) => {
+      engine(on, HISTORY.slice(0, 1))
+      const ui = await mount($)
+      expect((await ui.find({ type: 'Markdown' }))?.text).toBe('```mermaid\nflowchart LR\n  a --> b\n```')
+      expect(await ui.find({ text: 'boom' })).toBeUndefined()
+      expect(await ui.find({ text: /ctrl\+x tab/ })).toBeUndefined()
+    })
 
   test(`${surface}: x closes the pane`, async ($, on) => {
     const closed = engine(on, HISTORY)

@@ -143,10 +143,11 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    const { Box, Text, Button } = $.ui.resolve(e)
+    const { Box, Text, Button, Markdown } = $.ui.resolve(e)
     const list = await read($, diagrams)
     const close = <Button key="close" plain hotkey="x" label="close" onPress={() => $.ui.close({ id: PANE })} />
-    const hint = <Text dimColor>Click the pane or press ctrl+x tab to use its keys</Text>
+    const isTerminal = e.surface === 'terminal'
+    const hint = isTerminal && <Text dimColor>Click the pane or press ctrl+x tab to use its keys</Text>
     if (list.length === 0) return <Box flexDirection="column" paddingTop={1}><Box gap={1}><Text dimColor>No diagrams yet. Ask with /show-me.</Text>{close}</Box>{hint}</Box>
     const i = Math.min(await read($, index), list.length - 1)
     const d = list[i]!
@@ -156,12 +157,14 @@ export const register: Register = on => {
     const room = Math.max(1, (e.viewport?.rows ?? 24) - 5)
 
     let body
-    if (d.error) body = <Box flexDirection="column"><Text color="red">{d.error}</Text><Text dimColor>{d.source}</Text></Box>
+    // Other surfaces draw a mermaid fence themselves, so they need neither mmdc nor its PNG.
+    if (!isTerminal) body = <Markdown text={'```mermaid\n' + d.source + '\n```'} />
+    else if (d.error) body = <Box flexDirection="column"><Text color="red">{d.error}</Text><Text dimColor>{d.source}</Text></Box>
     else if (!d.png || !d.width || !d.height) body = <Text dimColor>rendering…</Text>
-    else if (e.surface === 'terminal') {
+    else {
       const { Image } = $.ui.resolve(e as typeof e & { surface: 'terminal' })
       body = <Image source={{ file: d.png, format: 'png' }} {...fitImage(d.width, d.height, cols, room)} alt={d.title} />
-    } else body = <Text dimColor>{d.source}</Text>
+    }
 
     return (
       <Box flexDirection="column" paddingTop={1}>
