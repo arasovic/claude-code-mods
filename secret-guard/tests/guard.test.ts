@@ -82,6 +82,16 @@ test('code that names env is not a credential file, a whole-env dump is still ca
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
+test('quoted patterns and heredoc bodies written to a file are not commands', () => {
+  for (const c of ['grep -n -E "(type|interface) (export )?(Foo)" types.d.ts', 'grep -n -E "^\\s{6}(env|session): \\{" types.d.ts',
+    `cat > notes.py <<'EOF'\nprint("one .env file")\nexport\nEOF`, `tee notes.md <<EOF\nsee .env and printenv\nEOF`,
+    `cat > a.txt <<'PYEOF'\nenv\nPYEOF\ngit status`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of [`python3 - <<'EOF'\nprint(open('.env').read())\nEOF`, 'echo "$(printenv)"', 'echo "a `env` b"',
+    `cat > a.txt <<'EOF'\nplain\nEOF\nprintenv`, 'grep "x" a.txt; export', 'cat ".env"'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
