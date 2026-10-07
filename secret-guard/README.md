@@ -20,6 +20,7 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 ## Limits
 
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.
+- Quoted text and heredoc bodies are not read as commands, so `grep "(export )?" file` runs. The body of a heredoc that `cat > file` or `tee` writes is data and is not checked at all. A heredoc fed to an interpreter (`python3 - <<EOF`) is still checked for credential file names, so text in it that names one (`.env`) is blocked.
 - Secrets in a format it does not know pass through.
 - A name followed by `(` is read as a function call, not a file, so `grep "mock.env(" tests` runs. A zsh glob qualifier on a credential file (`cat .env(N)`) gets through the same way; known key formats in its output are still hidden. Code names such as `process.env`, `import.meta.env` and `c.env` are not files either, but a script that prints the whole environment (`console.log(process.env)`, `print(os.environ)`) is blocked.
 - Commands that touch a credential file without printing it still run: `ls`, `stat`, `test` / `[`, `touch`, `chmod`, `chown`, `rm`. `cp` and `mv` run when the credential file is the target (`cp .env.example .env`), not when it is the source, so a file cannot be copied to a new name and read there.
