@@ -142,16 +142,27 @@ export const target = (input: Record<string, unknown>) => {
 
 export const toolName = (tool: string) => (tool.startsWith('mcp__') ? (tool.split('__').at(-1) ?? tool) : tool)
 
-// Rows are runs of styled text, so their width is known before drawing: frames pad and cut them exactly.
-export type Seg = { t: string; c?: string; d?: boolean; b?: boolean }
-type Row = Seg[]
+// Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
+// Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), a Bar draws `parts` as real
+// bars in place of its `cells`, a Spark draws a bar per value, and a Group takes an equal share of the line.
+export type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+type Bar = { cells: Seg[]; parts: { n: number; c?: string }[] }
+type Spark = { spark: readonly number[]; max: number; c: string }
+type Group = { group: Row }
+type Row = (Seg | Bar | Spark | Group)[]
 
-const width = (row: Row) => row.reduce((n, s) => n + s.t.length, 0)
+// The empty part of a bar where the surface draws real bars.
+const TRACK = 'userMessageBackgroundHover'
 
-export const fit = (row: Row, w: number): Row => {
-  const out: Row = []
+const segs = (row: Row): Seg[] => row.flatMap(s => ('t' in s ? [s] : 'cells' in s ? s.cells : 'group' in s ? segs(s.group) : []))
+
+const width = (row: Row) => segs(row).reduce((n, s) => n + s.t.length, 0)
+
+export const fit = (row: Row, w: number): Seg[] => {
+  const out: Seg[] = []
   let n = 0
-  for (const s of row) {
+  for (const s of segs(row)) {
     const room = w - n
     if (room <= 0) break
     if (s.t.length <= room) {
@@ -166,14 +177,20 @@ export const fit = (row: Row, w: number): Row => {
   return out
 }
 
-const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))) }, ...right]
+const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))), fill: true }, ...right]
 
 const zone = (pct: number) => (pct >= 80 ? 'error' : pct >= 60 ? 'warning' : 'success')
 
+// The meter's fill split at the zone edges, so a real bar warms as it fills, as the terminal's cells do.
+export const zoneParts = (pct: number) => {
+  const p = Math.min(100, Math.max(0, pct))
+  return [{ n: Math.min(p, 60), c: 'success' }, { n: Math.min(Math.max(p - 60, 0), 20), c: 'warning' }, { n: Math.max(p - 80, 0), c: 'error' }, { n: 100 - p }]
+}
+
 // A meter with eighth-cell precision; filled cells take the colour of the zone they sit in, so the bar warms as it fills.
-export const meter = (pct: number, w: number): Row => {
+export const meter = (pct: number, w: number): Seg[] => {
   const eighths = Math.round((Math.min(100, Math.max(0, pct)) / 100) * w * 8)
-  const out: Row = []
+  const out: Seg[] = []
   for (let i = 0; i < w; i++) {
     const left = eighths - i * 8
     const ch = left >= 8 ? '█' : left > 0 ? (EIGHTHS[left] ?? ' ') : '·'
@@ -295,11 +312,43 @@ export const register: Register = (on, options) => {
     const now = await $.clock.now()
     const w = Math.max(28, e.props.bodyColumns - 1)
     const inner = w - 6
+    const isGrid = e.surface === 'terminal'
     if (!b) return <Text dimColor>Waiting for the first context reading.</Text>
 
     const draw = (row: Row, width: number) =>
       fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
+    // A row as a flex line, for surfaces that draw text in a proportional font.
+    const items = (row: Row) =>
+      row.map((s, j) => {
+        if ('group' in s) return <Box flexGrow={1} width={0} alignItems="center">{items(s.group)}</Box>
+        if ('cells' in s) {
+          // The engine takes a flexGrow up to 10000, so parts are weighed per thousand.
+          const total = Math.max(1, s.parts.reduce((n, p) => n + p.n, 0))
+          return <Box flexGrow={1} height={0.5}>{s.parts.map(p => <Box flexGrow={(p.n / total) * 1000} backgroundColor={p.c ?? TRACK} />)}</Box>
+        }
+        if ('spark' in s)
+          return (
+            <Box flexGrow={1} height={2} alignItems="flex-end">
+              {s.spark.map(v => <Box flexGrow={1} height={`${Math.max(1, Math.round((Math.min(v, s.max) / Math.max(1, s.max)) * 100))}%`} backgroundColor={s.c} />)}
+            </Box>
+          )
+        if (s.fill) return <Box flexGrow={1} />
+        const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
+        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+      })
+    const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
+      if (!isGrid)
+        return (
+          <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
+            <Box marginBottom={1}>
+              <Text color={tone} bold>{title}</Text>
+              <Box flexGrow={1} />
+              {right ? <Text dimColor>{right}</Text> : null}
+            </Box>
+            {rows.map(line)}
+          </Box>
+        )
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
         <Box key={title} flexDirection="column" marginTop={1}>
@@ -324,40 +373,47 @@ export const register: Register = (on, options) => {
 
     // Context: one stacked bar of what fills it, the compaction mark, a legend, the size over turns, the heaviest items.
     const used = b.categories.filter(c => c.kind === 'used' && c.tokens > 0)
-    const bar: Row = used.map(c => ({ t: '█'.repeat(cells(c.tokens, b.window, inner)), c: c.color }))
+    const bar: Seg[] = used.map(c => ({ t: '█'.repeat(cells(c.tokens, b.window, inner)), c: c.color }))
     const filled = width(bar)
     const mark = b.threshold === undefined ? -1 : Math.min(inner - 1, cells(b.threshold, b.window, inner))
     for (let i = filled; i < inner; i++) bar.push(i === mark ? { t: '┊', c: 'warning' } : { t: '·', d: true, c: mark >= 0 && i > mark ? 'error' : undefined })
+    // Real bars mark the compaction point by tinting the room past it.
+    const usedTokens = used.reduce((n, c) => n + c.tokens, 0)
+    const free = Math.max(0, (b.threshold ?? b.window) - usedTokens)
+    const parts = [...used.map(c => ({ n: c.tokens, c: c.color })), { n: free }, { n: Math.max(0, b.window - usedTokens - free), c: 'diffRemovedDimmed' }]
     // The legend is a two-column grid, names left and counts right-aligned in each column.
     const colW = Math.floor((inner - 3) / 2)
     const keys = [
       ...used.map(c => ({ mark: '■', c: c.color, name: c.name, n: tokens(c.tokens) })),
-      ...(b.threshold === undefined ? [] : [{ mark: '┊', c: 'warning', name: 'compacts at', n: tokens(b.threshold) }]),
+      ...(b.threshold === undefined ? [] : [{ mark: isGrid ? '┊' : '■', c: isGrid ? 'warning' : 'diffRemovedDimmed', name: 'compacts at', n: tokens(b.threshold) }]),
     ]
     const key = (k: (typeof keys)[number]): Row => spread([{ t: `${k.mark} `, c: k.c }, { t: k.name.slice(0, colW - k.n.length - 3) }], [{ t: k.n, d: true }], colW)
     const legend: Row[] = []
     for (let i = 0; i < keys.length; i += 2) {
       const [a, z] = [keys[i], keys[i + 1]]
-      if (a) legend.push([...key(a), ...(z ? [{ t: '   ' }, ...key(z)] : [])])
+      if (a) legend.push([{ group: key(a) }, ...(z ? [{ t: '   ' }, { group: key(z) }] : [{ group: [] }])])
     }
     const last = turns.at(-1)
     const prev = turns.at(-2)
     const delta = last !== undefined && prev !== undefined ? last - prev : undefined
     const chartCols = inner - 12
     const chart = turns.length < 2 ? [] : braille(turns, b.window, chartCols, 2)
+    const change: Seg = { t: `${delta !== undefined && delta >= 0 ? '+' : '-'}${tokens(Math.abs(delta ?? 0))}`, b: true }
     const contextRows: Row[] = [
       spread([{ t: tokens(b.tokens), b: true }, { t: ` of ${tokens(b.window)}`, d: true }], [{ t: `${Math.round(b.percent)}%`, c: zone(b.percent), b: true }], inner),
       [],
-      bar,
+      [{ cells: bar, parts }],
       [],
       ...legend,
       [],
-      ...(chart.length
-        ? [
-            [{ t: chart[0] ?? '', c: 'suggestion' }, { t: '  ' }, { t: `${delta !== undefined && delta >= 0 ? '+' : '-'}${tokens(Math.abs(delta ?? 0))}`, b: true }],
-            [{ t: chart[1] ?? '', c: 'suggestion' }, { t: '  last turn', d: true }],
-          ]
-        : [[{ t: 'Size over turns shows after two turns.', d: true }]]),
+      ...(!chart.length
+        ? [[{ t: 'Size over turns shows after two turns.', d: true }]]
+        : isGrid
+          ? [
+              [{ t: chart[0] ?? '', c: 'suggestion' }, { t: '  ' }, change],
+              [{ t: chart[1] ?? '', c: 'suggestion' }, { t: '  last turn', d: true }],
+            ]
+          : [[{ spark: turns.slice(-chartCols * 2), max: b.window, c: 'suggestion' }, { t: '  ' }, change, { t: '  last turn', d: true }]]),
       ...(b.heaviest.length ? [[] as Row, ...b.heaviest.map(item => spread([{ t: '▸ ', d: true }, { t: item.name }], [{ t: tokens(item.tokens), d: true }], inner))] : []),
     ]
 
@@ -374,7 +430,12 @@ export const register: Register = (on, options) => {
       const pct = `${Math.round(limit.percentUsed)}%`.padStart(4)
       const reset = `↻${duration(resetsIn(limit.resetsAt, now))}`.padEnd(7)
       if (limitRows.length) limitRows.push([])
-      limitRows.push([{ t: `${win.label} `, b: true }, { t: '▕', d: true }, ...meter(limit.percentUsed, inner - 18), { t: '▏', d: true }, { t: ` ${pct} `, c: tone, b: true }, { t: reset, d: true }])
+      limitRows.push([
+        { t: `${win.label} `, b: true, w: 3 },
+        { cells: [{ t: '▕', d: true }, ...meter(limit.percentUsed, inner - 18), { t: '▏', d: true }], parts: zoneParts(limit.percentUsed) },
+        { t: ` ${pct} `, c: tone, b: true, w: 6, right: true },
+        { t: reset, d: true, w: 8, right: true },
+      ])
       limitRows.push(
         p.kind === 'measuring'
           ? [{ t: '   measuring pace…', d: true }]
@@ -402,22 +463,25 @@ export const register: Register = (on, options) => {
       ? shown.map(t => {
           const icon = t.ok === undefined ? { t: '◌', c: 'warning' } : t.ok ? { t: '✓', c: 'success' } : { t: '✗', c: 'error' }
           const time = t.ms === undefined ? '…' : elapsed(t.ms)
-          return spread([icon, { t: ` ${(t.sub ? `↳${t.name}` : t.name).padEnd(7)} `, b: !t.sub, d: t.sub }, { t: t.target.slice(0, inner - 16), d: true }], [{ t: time, d: true }], inner)
+          return spread([icon, { t: ` ${(t.sub ? `↳${t.name}` : t.name).padEnd(7)} `, b: !t.sub, d: t.sub, w: 11 }, { t: t.target.slice(0, inner - 16), d: true }], [{ t: time, d: true }], inner)
         })
       : [[{ t: 'No tool calls yet.', d: true }]]
     const toolTone = shown.find(t => t.ok !== undefined)?.ok === false ? 'error' : 'success'
 
+    // A right-aligned column n wide.
+    const num = (t: string, n: number, s: Omit<Seg, 't'> = {}): Seg => ({ ...s, t: t.padStart(n), w: n, right: true })
     const askRows: Row[] = asks.length
       ? [
-          [{ t: 'loop          in   out  cache   time', d: true }],
+          [{ t: 'loop'.padEnd(10), d: true, w: 10 }, num('in', 6, { d: true }), num('out', 6, { d: true }), num('cache', 7, { d: true }), num('time', 7, { d: true })],
           ...asks.slice(0, askCount).map(q => {
             const hit = q.input ? Math.round((q.cached / q.input) * 100) : 0
             const cacheTone = hit < 20 ? 'error' : hit < 50 ? 'warning' : undefined
             return [
-              { t: q.agent.padEnd(10).slice(0, 10), b: q.agent === 'main', d: q.agent !== 'main' },
-              { t: tokens(q.input).padStart(6) + tokens(q.output).padStart(6) },
-              { t: `${hit}%`.padStart(7), c: cacheTone, d: cacheTone === undefined },
-              { t: elapsed(q.ms).padStart(7), d: true },
+              { t: q.agent.padEnd(10).slice(0, 10), b: q.agent === 'main', d: q.agent !== 'main', w: 10 },
+              num(tokens(q.input), 6),
+              num(tokens(q.output), 6),
+              num(`${hit}%`, 7, { c: cacheTone, d: cacheTone === undefined }),
+              num(elapsed(q.ms), 7, { d: true }),
             ]
           }),
         ]
@@ -427,9 +491,7 @@ export const register: Register = (on, options) => {
 
     return (
       <Box flexDirection="column" paddingTop={1}>
-        <Text>
-          {draw(glance, w - 3)}
-        </Text>
+        {isGrid ? <Text>{draw(glance, w - 3)}</Text> : line(glance)}
         {frame('Context', zone(b.percent), contextRows)}
         {limitRows.length ? frame('Limits', limitTone, limitRows) : null}
         {frame('Tools', toolTone, toolRows, running ? `${running} running` : '')}

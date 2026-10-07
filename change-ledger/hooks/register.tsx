@@ -91,16 +91,25 @@ const refreshGit = async ($: EngineInterface) => {
   await update($, git, () => ({ root: repo.root, branch: s.branch, ahead: s.ahead, behind: s.behind, files: changed }))
 }
 
-// Rows are runs of styled text, so their width is known before drawing: frames pad and cut them exactly.
-type Seg = { t: string; c?: string; d?: boolean; b?: boolean }
-type Row = Seg[]
+// Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
+// Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), and a Bar draws `parts`
+// as real bars in place of its `cells`, `w` wide or stretching.
+type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+type Bar = { cells: Seg[]; parts: { n: number; c?: string }[]; w?: number }
+type Row = (Seg | Bar)[]
 
-const width = (row: Row) => row.reduce((n, s) => n + s.t.length, 0)
+// The empty part of a bar where the surface draws real bars.
+const TRACK = 'userMessageBackgroundHover'
 
-const fit = (row: Row, w: number): Row => {
-  const out: Row = []
+const segs = (row: Row): Seg[] => row.flatMap(s => ('t' in s ? [s] : s.cells))
+
+const width = (row: Row) => segs(row).reduce((n, s) => n + s.t.length, 0)
+
+const fit = (row: Row, w: number): Seg[] => {
+  const out: Seg[] = []
   let n = 0
-  for (const s of row) {
+  for (const s of segs(row)) {
     const room = w - n
     if (room <= 0) break
     if (s.t.length <= room) {
@@ -115,7 +124,7 @@ const fit = (row: Row, w: number): Row => {
   return out
 }
 
-const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))) }, ...right]
+const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))), fill: true }, ...right]
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
@@ -160,10 +169,38 @@ export const register: Register = on => {
     const cwd = await $.session.cwd()
     const w = Math.max(28, e.props.bodyColumns - 1)
     const inner = w - 6
+    const isGrid = e.surface === 'terminal'
 
     const draw = (row: Row, width: number) =>
       fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
+    // A row as a flex line, for surfaces that draw text in a proportional font.
+    const items = (row: Row) =>
+      row.map((s, j) => {
+        if ('cells' in s) {
+          const total = Math.max(1, s.parts.reduce((n, p) => n + p.n, 0))
+          return (
+            <Box height={0.5} {...(s.w ? { width: s.w, flexShrink: 0 } : { flexGrow: 1 })}>
+              {s.parts.map(p => <Box flexGrow={(p.n / total) * 1000} backgroundColor={p.c ?? TRACK} />)}
+            </Box>
+          )
+        }
+        if (s.fill) return <Box flexGrow={1} />
+        const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
+        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+      })
+    const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
+      if (!isGrid)
+        return (
+          <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
+            <Box marginBottom={1}>
+              <Text color={tone} bold>{title}</Text>
+              <Box flexGrow={1} />
+              {right ? <Text dimColor>{right}</Text> : null}
+            </Box>
+            {rows.map(line)}
+          </Box>
+        )
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
         <Box key={title} flexDirection="column" marginTop={1}>
@@ -194,8 +231,8 @@ export const register: Register = on => {
       return parts.length > 2 && !path.startsWith(`${cwd}/`) ? `…/${parts.slice(-2).join('/')}/` : `${parts.join('/')}/`
     }
     const counts = (added: number, removed: number): Row => [
-      { t: `+${added}`.padStart(5), c: 'success' },
-      { t: ` −${removed}`.padEnd(6), c: 'error' },
+      { t: `+${added}`.padStart(5), c: 'success', w: 5, right: true },
+      { t: ` −${removed}`.padEnd(6), c: 'error', w: 6 },
     ]
 
     const added = list.reduce((n, f) => n + f.added, 0)
@@ -214,7 +251,7 @@ export const register: Register = on => {
             const mine = touched.has(`${tree.root}/${f.path}`)
             const tone = f.status === '??' || f.status === 'A' ? 'success' : f.status === 'D' ? 'error' : 'warning'
             const right: Row = f.added === undefined ? [{ t: f.status === '??' ? 'new' : '', d: true }] : counts(f.added, f.removed ?? 0)
-            return spread([{ t: mine ? '● ' : '○ ', c: mine ? 'suggestion' : undefined, d: !mine }, { t: f.status.padEnd(3), c: tone }, { t: f.path, d: !mine }], right, inner)
+            return spread([{ t: mine ? '● ' : '○ ', c: mine ? 'suggestion' : undefined, d: !mine }, { t: f.status.padEnd(3), c: tone, w: 3 }, { t: f.path, d: !mine }], right, inner)
           })
         : [[{ t: 'Working tree clean.', d: true }]]
       : []
@@ -230,7 +267,14 @@ export const register: Register = on => {
           const bar = statBar(f.added, f.removed, max, 8)
           const top = spread(
             [{ t: name(f.path), b: true }, ...(f.created ? [{ t: ' new', c: 'success' }] : [])],
-            [{ t: '■'.repeat(bar.plus), c: 'success' }, { t: '■'.repeat(bar.minus), c: 'error' }, { t: '·'.repeat(bar.rest), d: true }, ...counts(f.added, f.removed)],
+            [
+              {
+                cells: [{ t: '■'.repeat(bar.plus), c: 'success' }, { t: '■'.repeat(bar.minus), c: 'error' }, { t: '·'.repeat(bar.rest), d: true }],
+                parts: [{ n: bar.plus, c: 'success' }, { n: bar.minus, c: 'error' }, { n: bar.rest }],
+                w: 8,
+              },
+              ...counts(f.added, f.removed),
+            ],
             inner,
           )
           const sub = spread([{ t: `  ${dir(f.path)}`, d: true }], [{ t: `${f.agents.join(', ')} · ${f.edits}× · ${ago(now - f.at)}`, d: true }], inner)
@@ -241,9 +285,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" paddingTop={1}>
-        <Text>
-          {draw(glance, w - 3)}
-        </Text>
+        {isGrid ? <Text>{draw(glance, w - 3)}</Text> : line(glance)}
         {frame('Edits', 'suggestion', editRows, more > 0 ? `+${more} more` : '')}
         {tree ? frame('Working tree', tree.files.some(f => !touched.has(`${tree.root}/${f.path}`)) ? 'warning' : 'success', gitRows, `${tree.files.length} changed`) : null}
       </Box>

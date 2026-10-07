@@ -103,16 +103,34 @@ const close = async ($: EngineInterface, id: string, ok?: boolean) => {
   await update($, turn, t => (t ? { ...t, spans: t.spans.map(s => (s.id === id ? { ...s, end, ok } : s)) } : t))
 }
 
-// Rows are runs of styled text, so their width is known before drawing: frames pad and cut them exactly.
-type Seg = { t: string; c?: string; d?: boolean; b?: boolean }
-type Row = Seg[]
+// Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
+// Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), and a Bar draws `parts`
+// as real bars in place of its `cells`.
+type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+type Bar = { cells: Seg[]; parts: { n: number; c?: string }[] }
+type Row = (Seg | Bar)[]
 
-const width = (row: Row) => row.reduce((n, s) => n + s.t.length, 0)
+// The empty part of a bar where the surface draws real bars.
+const TRACK = 'userMessageBackgroundHover'
 
-const fit = (row: Row, w: number): Row => {
-  const out: Row = []
+const segs = (row: Row): Seg[] => row.flatMap(s => ('t' in s ? [s] : s.cells))
+
+const width = (row: Row) => segs(row).reduce((n, s) => n + s.t.length, 0)
+
+// Consecutive cells of one colour as one part of a real bar.
+const runs = (cells: readonly Seg[]) =>
+  cells.reduce<{ n: number; c?: string }[]>((out, s) => {
+    const last = out.at(-1)
+    if (last && last.c === s.c) last.n += s.t.length
+    else out.push({ n: s.t.length, c: s.c })
+    return out
+  }, [])
+
+const fit = (row: Row, w: number): Seg[] => {
+  const out: Seg[] = []
   let n = 0
-  for (const s of row) {
+  for (const s of segs(row)) {
     const room = w - n
     if (room <= 0) break
     if (s.t.length <= room) {
@@ -127,7 +145,7 @@ const fit = (row: Row, w: number): Row => {
   return out
 }
 
-const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))) }, ...right]
+const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))), fill: true }, ...right]
 
 const CELL: Record<ReturnType<typeof laneCells>[number], Seg> = {
   tool: { t: '█', c: 'success' },
@@ -193,11 +211,35 @@ export const register: Register = on => {
     const now = await $.clock.now()
     const w = Math.max(30, e.props.bodyColumns - 1)
     const inner = w - 6
+    const isGrid = e.surface === 'terminal'
     if (!t) return <Text dimColor>The timeline starts with the next turn.</Text>
 
     const draw = (row: Row, width: number) =>
       fit(row, width).map((s, j) => <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b}>{s.t}</Text>)
+    // A row as a flex line, for surfaces that draw text in a proportional font.
+    const items = (row: Row) =>
+      row.map((s, j) => {
+        if ('cells' in s) {
+          const total = Math.max(1, s.parts.reduce((n, p) => n + p.n, 0))
+          return <Box flexGrow={1} height={0.5}>{s.parts.map(p => <Box flexGrow={(p.n / total) * 1000} backgroundColor={p.c ?? TRACK} />)}</Box>
+        }
+        if (s.fill) return <Box flexGrow={1} />
+        const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
+        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+      })
+    const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
+      if (!isGrid)
+        return (
+          <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
+            <Box marginBottom={1}>
+              <Text color={tone} bold>{title}</Text>
+              <Box flexGrow={1} />
+              {right ? <Text dimColor>{right}</Text> : null}
+            </Box>
+            {rows.map(line)}
+          </Box>
+        )
       const rule = Math.max(0, w - 6 - title.length - (right ? right.length + 2 : 0))
       return (
         <Box key={title} flexDirection="column" marginTop={1}>
@@ -251,16 +293,18 @@ export const register: Register = on => {
         cols,
         now,
       ).map(k => CELL[k])
-      const row: Row = [{ t: lane.label.padEnd(LABEL_W).slice(0, LABEL_W), b: lane.id === 'main', d: lane.id !== 'main' }, ...cells]
+      const row: Row = [{ t: lane.label.padEnd(LABEL_W).slice(0, LABEL_W), b: lane.id === 'main', d: lane.id !== 'main', w: LABEL_W }, { cells, parts: runs(cells) }]
       return i ? [[], row] : [row]
     })
     const hidden = t.lanes.length - lanes.length
     const timelineRows: Row[] = [
       ...laneRows,
       ...(hidden > 0 ? [[{ t: `+${hidden} more loops`, d: true }]] : []),
-      [{ t: ' '.repeat(LABEL_W) }, { t: axis(duration, cols), d: true }],
+      isGrid ? [{ t: ' '.repeat(LABEL_W) }, { t: axis(duration, cols), d: true }] : [{ t: '', w: LABEL_W }, { t: '0', d: true }, { t: '', fill: true }, { t: clock(duration), d: true }],
       [],
-      [{ t: '█', c: 'success' }, { t: ' tool   ', d: true }, { t: '▒', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '█', c: 'error' }, { t: ' failed   ', d: true }, { t: '·', d: true }, { t: ' idle', d: true }],
+      isGrid
+        ? [{ t: '█', c: 'success' }, { t: ' tool   ', d: true }, { t: '▒', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '█', c: 'error' }, { t: ' failed   ', d: true }, { t: '·', d: true }, { t: ' idle', d: true }]
+        : [{ t: '■', c: 'success' }, { t: ' tool   ', d: true }, { t: '■', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '■', c: 'error' }, { t: ' failed   ', d: true }, { t: '■', c: TRACK }, { t: ' idle', d: true }],
     ]
 
     // Each share as a bar against the turn's length, model and idle named, tools by name.
@@ -268,11 +312,19 @@ export const register: Register = on => {
     const shareRows: Row[] = parts.slice(0, 6).map(p => {
       const filled = Math.round((p.pct / 100) * barW)
       const tone = p.name === 'model' ? 'suggestion' : p.name === 'idle' ? undefined : 'success'
-      return spread(
-        [{ t: p.name.padEnd(9).slice(0, 9), d: p.name === 'idle' }, { t: '█'.repeat(filled), c: tone, d: p.name === 'idle' }, { t: '·'.repeat(Math.max(0, barW - filled)), d: true }],
-        [{ t: clock(p.ms).padStart(6), d: true }, { t: `${Math.round(p.pct)}%`.padStart(5), b: true }],
-        inner,
-      )
+      const left: Row = [
+        { t: p.name.padEnd(9).slice(0, 9), d: p.name === 'idle', w: 9 },
+        {
+          cells: [{ t: '█'.repeat(filled), c: tone, d: p.name === 'idle' }, { t: '·'.repeat(Math.max(0, barW - filled)), d: true }],
+          parts: [{ n: filled, c: tone ?? 'promptBorder' }, { n: Math.max(0, barW - filled) }],
+        },
+      ]
+      const right: Row = [
+        { t: clock(p.ms).padStart(6), d: true, w: 6, right: true },
+        { t: `${Math.round(p.pct)}%`.padStart(5), b: true, w: 5, right: true },
+      ]
+      // A real bar stretches by itself; a spacer beside it would take half the room.
+      return isGrid ? spread(left, right, inner) : [...left, ...right]
     })
 
     const slowest = t.spans
@@ -299,9 +351,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" paddingTop={1}>
-        <Text>
-          {draw(glance, w - 3)}
-        </Text>
+        {isGrid ? <Text>{draw(glance, w - 3)}</Text> : line(glance)}
         {frame('Timeline', 'suggestion', timelineRows, `${t.lanes.length} ${t.lanes.length === 1 ? 'loop' : 'loops'}`)}
         {frame('Where time went', 'success', shareRows, 'main loop')}
         {frame('Slowest', 'warning', slowRows)}
