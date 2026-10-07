@@ -11,7 +11,16 @@ const git = atom({ plugin: 'change-ledger', key: 'git' } as const, null as Ledge
 // Subagent ids never change type, so one lookup per id is enough.
 const agentTypes = new Map<string, string>()
 
-const lines = (text: string) => (text ? text.split('\n').length : 0)
+// A final newline ends the last line; it does not start another.
+export const lines = (text: string) => (text ? text.split('\n').length - (text.endsWith('\n') ? 1 : 0) : 0)
+
+// A path's folder: relative inside the session folder, the last two folders when far outside it.
+export const folder = (path: string, cwd: string) => {
+  const outside = !path.startsWith(`${cwd}/`)
+  const parts = (outside ? path : path.slice(cwd.length + 1)).split('/').slice(0, -1)
+  if (!parts.length) return './'
+  return outside && parts.filter(Boolean).length > 2 ? `…/${parts.slice(-2).join('/')}/` : `${parts.join('/')}/`
+}
 
 // An edit's added and removed lines, not counting the lines old and new share at either end.
 export const lineDelta = (before: string, after: string) => {
@@ -224,12 +233,6 @@ export const register: Register = on => {
     }
 
     const name = (path: string) => path.split('/').pop() ?? path
-    const dir = (path: string) => {
-      const inside = path.startsWith(`${cwd}/`) ? path.slice(cwd.length + 1) : path
-      const parts = inside.split('/').slice(0, -1)
-      if (!parts.length) return './'
-      return parts.length > 2 && !path.startsWith(`${cwd}/`) ? `…/${parts.slice(-2).join('/')}/` : `${parts.join('/')}/`
-    }
     const counts = (added: number, removed: number): Row => [
       { t: `+${added}`.padStart(5), c: 'success', w: 5, right: true },
       { t: ` −${removed}`.padEnd(6), c: 'error', w: 6 },
@@ -277,7 +280,7 @@ export const register: Register = on => {
             ],
             inner,
           )
-          const sub = spread([{ t: `  ${dir(f.path)}`, d: true }], [{ t: `${f.agents.join(', ')} · ${f.edits}× · ${ago(now - f.at)}`, d: true }], inner)
+          const sub = spread([{ t: `  ${folder(f.path, cwd)}`, d: true }], [{ t: `${f.agents.join(', ')} · ${f.edits}× · ${ago(now - f.at)}`, d: true }], inner)
           return i ? [[], top, sub] : [top, sub]
         })
       : [[{ t: 'Files Claude edits or writes show here.', d: true }]]

@@ -1,12 +1,26 @@
 import { expect, test } from 'claude-code/testing'
 
-import { ago, lineDelta, parseNumstat, parseStatus, statBar } from '../hooks/register'
+import { ago, folder, lineDelta, lines, parseNumstat, parseStatus, statBar } from '../hooks/register'
 
 test('an edit counts only the lines that differ', () => {
   expect(lineDelta('a\nb\nc', 'a\nB\nc')).toEqual({ added: 1, removed: 1 })
   expect(lineDelta('a\nc', 'a\nb\nc')).toEqual({ added: 1, removed: 0 })
   expect(lineDelta('x', 'x\ny\nz')).toEqual({ added: 2, removed: 0 })
   expect(lineDelta('a\nb', 'c')).toEqual({ added: 1, removed: 2 })
+})
+
+test('a new file counts its lines as git does, the final newline ending the last line', () => {
+  expect(lines('a\nb\nc\nd\n')).toBe(4)
+  expect(lines('a\nb\nc\nd')).toBe(4)
+  expect(lines('\n')).toBe(1)
+  expect(lines('')).toBe(0)
+})
+
+test('the folder label shortens only paths outside the session folder with more than two folders', () => {
+  expect(folder('/tmp/pane-test/c.md', '/Users/me/app')).toBe('/tmp/pane-test/')
+  expect(folder('/Users/me/lib/src/util/x.ts', '/Users/me/app')).toBe('…/src/util/')
+  expect(folder('/Users/me/app/src/a/b/c.ts', '/Users/me/app')).toBe('src/a/b/')
+  expect(folder('/Users/me/app/a.txt', '/Users/me/app')).toBe('./')
 })
 
 test('git status and numstat parsing', () => {
