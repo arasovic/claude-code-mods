@@ -67,6 +67,17 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ text: /ctrl\+x tab/ })).toBeUndefined()
     })
 
+  if (surface !== 'terminal')
+    test(`${surface}: a rendered diagram is its PNG inside an Svg, at half its pixels`, async ($, on) => {
+      engine(on, [{ turnId: 't1', title: 'flowchart LR', source: 'flowchart LR\n  a --> b', png: '/tmp/out-1.png', width: 200, height: 100 }])
+      on('fs.read', async () => ({ value: { base64: 'iVBORw0KGgo=' } }))
+      const ui = await mount($)
+      const svg = String((await ui.find({ type: 'Svg' }))?.props.source)
+      expect(svg).toContain('width="100" height="50" viewBox="0 0 200 100"')
+      expect(svg).toContain('href="data:image/png;base64,iVBORw0KGgo="')
+      expect(await ui.find({ type: 'Markdown' })).toBeUndefined()
+    })
+
   test(`${surface}: x closes the pane`, async ($, on) => {
     const closed = engine(on, HISTORY)
     const ui = await mount($)

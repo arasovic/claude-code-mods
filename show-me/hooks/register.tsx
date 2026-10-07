@@ -98,6 +98,14 @@ const render = async ($: EngineInterface, sources: string[], turnId: string) => 
   )
 }
 
+// Other surfaces have no Image, so the PNG goes inside an Svg, at half its pixels since mmdc draws at scale 2.
+// Undefined while there is no PNG, or past the Svg's 131072-character cap.
+export const svgOf = (d: Diagram, base64: string) => {
+  if (!d.width || !d.height) return undefined
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${d.width / 2}" height="${d.height / 2}" viewBox="0 0 ${d.width} ${d.height}"><image href="data:image/png;base64,${base64}" width="${d.width}" height="${d.height}"/></svg>`
+  return svg.length <= 131072 ? svg : undefined
+}
+
 // No focus: a focused pane takes the arrows and the hotkey letters away from the prompt.
 // The person clicks the pane (or ctrl+x tab) to use its keys.
 const open = ($: EngineInterface) => $.ui.open({ id: PANE, title: 'Show me', closeOnEscape: true })
@@ -157,9 +165,13 @@ export const register: Register = on => {
     const room = Math.max(1, (e.viewport?.rows ?? 24) - 5)
 
     let body
-    // Other surfaces draw a mermaid fence themselves, so they need neither mmdc nor its PNG.
-    if (!isTerminal) body = <Markdown text={'```mermaid\n' + d.source + '\n```'} />
-    else if (d.error) body = <Box flexDirection="column"><Text color="red">{d.error}</Text><Text dimColor>{d.source}</Text></Box>
+    if (!isTerminal) {
+      const bytes = d.png && !d.error ? await $.fs.read(d.png, { as: 'bytes' }).catch(() => null) : null
+      const svg = bytes && svgOf(d, bytes.base64)
+      const { Svg } = $.ui.resolve(e as typeof e & { surface: 'desktop' })
+      // Without a picture the source goes out as a mermaid fence, which a surface may draw itself.
+      body = svg ? <Svg source={svg} alt={d.title} /> : <Markdown text={'```mermaid\n' + d.source + '\n```'} />
+    } else if (d.error) body = <Box flexDirection="column"><Text color="red">{d.error}</Text><Text dimColor>{d.source}</Text></Box>
     else if (!d.png || !d.width || !d.height) body = <Text dimColor>rendering…</Text>
     else {
       const { Image } = $.ui.resolve(e as typeof e & { surface: 'terminal' })

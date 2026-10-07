@@ -24,7 +24,7 @@ If rendering fails, the pane shows the first error line and the diagram's source
 
   Elsewhere, install it normally so puppeteer brings its own browser.
 - A terminal with the kitty graphics protocol, such as Ghostty or kitty. Other terminals show the diagram's title in place of the picture.
-- The Claude desktop app needs neither: it draws the mermaid source itself.
+- The Claude desktop app does not need kitty: the pane shows the same picture there. Until the picture is ready, it shows the mermaid source.
 
 ## Install
 
