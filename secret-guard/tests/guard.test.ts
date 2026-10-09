@@ -82,14 +82,34 @@ test('code that names env is not a credential file, a whole-env dump is still ca
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
-test('quoted patterns and heredoc bodies written to a file are not commands', () => {
+test('quoted patterns and quoted heredocs that cat or tee write out are not commands', () => {
   for (const c of ['grep -n -E "(type|interface) (export )?(Foo)" types.d.ts', 'grep -n -E "^\\s{6}(env|session): \\{" types.d.ts',
-    `cat > notes.py <<'EOF'\nprint("one .env file")\nexport\nEOF`, `tee notes.md <<EOF\nsee .env and printenv\nEOF`,
-    `cat > a.txt <<'PYEOF'\nenv\nPYEOF\ngit status`])
+    `cat > notes.py <<'EOF'\nprint("one .env file")\nexport\nEOF`, `tee -a notes.md <<"EOF"\nsee .env and printenv\nEOF`,
+    `cat > a.txt <<'PYEOF'\nenv\nPYEOF\ngit status`, `cat <<'EOF' > notes.py\nload(".env")\nEOF`,
+    `mkdir -p x && cat >x/a.md << 'EOF'\nrun printenv\nEOF`, `cat > dump.js <<'EOF'\nconsole.log(process.env)\nEOF`, `grep $'\\t(export )?' types.d.ts`])
     expect(secretCommand(c, HOME)).toBeUndefined()
-  for (const c of [`python3 - <<'EOF'\nprint(open('.env').read())\nEOF`, 'echo "$(printenv)"', 'echo "a `env` b"',
-    `cat > a.txt <<'EOF'\nplain\nEOF\nprintenv`, 'grep "x" a.txt; export', 'cat ".env"'])
+  for (const c of [`python3 - <<'EOF'\nprint(open('.env').read())\nEOF`, 'echo "$(printenv)"', 'echo "a `env` b"', 'echo "`true; printenv`"',
+    `cat > a.txt <<'EOF'\nplain\nEOF\nprintenv`, 'grep "x" a.txt; export', 'cat ".env"', 'cat "x|ls" .env'])
     expect(secretCommand(c, HOME)).toBeDefined()
+})
+
+test('a heredoc body that can run is still read', () => {
+  for (const c of [`bash <<'EOF'\nprintenv\nEOF`, `cat <<'EOF' | sh\nprintenv\nEOF`, `cat <<EOF\n$(printenv)\nEOF`, `tee a.md <<EOF\n$(cat .env)\nEOF`,
+    `echo tee; python3 - <<'EOF'\nprint(open('.env').read())\nEOF`, `cat > x <<< hi\ncat .env`, `echo '<<X'\nprintenv`,
+    `cat > a <<EOF\ncat > b <<'X'\n$(printenv)\nX\nEOF`, `python3 - \\\ncat > a <<'EOF'\nprint(open('.env').read())\nEOF`,
+    `{\ncat <<'EOF'\nprintenv\nEOF\n} | bash`, `(\ncat <<'EOF'\nprintenv\nEOF\n) | bash`, `{ true && cat <<'EOF'\ncat .env\nEOF\n} | bash`,
+    `bash < <(\ncat <<'EOF'\nprintenv\nEOF\n)`, `$(\ncat <<'EOF'\nprintenv\nEOF\n)`])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
+test('a comment, a line continuation, a $\'…\' quote or a quote in a <<EOF body hides no command', () => {
+  for (const c of [`true # don't log secrets\nprintenv`, `ls # don't\ncat .env`, `echo $(true # don't\nprintenv)`,
+    `printf $'it\\'s done\\n'; printenv`, `ls $'don\\'t'; cat .env`,
+    `python3 - <<'PY'\n# don't forget\nprint(open(".env").read())\nPY`, `true && \\\nprintenv`, `true; \\\nprintenv`, `echo "$(\\\nprintenv)"`,
+    `cat <<EOF\nVALUE='$(printenv)'\nEOF`, `cat <<EOF\n'$(cat .env)'\nEOF`, `cat <<EOF\n'\`printenv\`'\nEOF`, `cat <<EOF\n# $(printenv)\nEOF`])
+    expect(secretCommand(c, HOME)).toBeDefined()
+  for (const c of ['echo $# ${#list[@]}', `grep -c '#' notes.md # count headings`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
 })
 
 test('a write that would put a hidden-value tag into a file is caught', () => {

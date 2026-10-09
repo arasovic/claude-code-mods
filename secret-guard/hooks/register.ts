@@ -101,21 +101,17 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   /^(echo|printf)\b.*\$\{?[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)/i,
 ]
 
-// ponytail: plain split on shell operators; sh -c, eval, globs and scripts the model writes pass through. Output scrubbing is the net for those.
-// A name right before `(` is a function call (`mock.env(on)`), not a file; `$(` keeps its `$`, so a substitution still splits.
-const segments = (command: string) =>
-  command.replace(/[\w.-]+\(/g, '(').split(/&&|\|\||[;|\n]|\$\(|`|\(|\)/).map(s => s.trim().replace(/^(sudo|command|exec|time|nohup)\s+/, '')).filter(Boolean)
-
-const SEGMENT_PREFIX = /^(sudo|command|exec|time|nohup)\s+/
-
-// Splits on shell operators outside quotes, so a quoted pattern such as grep "(export )?" stays one segment.
-// Inside double quotes `$(` and backticks still run a command, so they split there too.
-export const commandSegments = (command: string): string[] => {
+// ponytail: split on shell operators outside quotes; sh -c, eval, globs, scripts the model writes and a quote left open across lines
+// pass through. Output scrubbing is the net for those.
+// A name right before `(` is a function call (`mock.env(on)`), not a file. Quoted text stays one segment, so `grep "(export )?"` is not
+// read as `export`; `$(` and backticks still run a command inside double quotes, so they split there too.
+const commandSegments = (command: string): string[] => {
   const text = command.replace(/[\w.-]+\(/g, '(')
   const parts: string[] = []
   const resumeQuotes: ('"' | null)[] = []
   let current = ''
-  let quote: '"' | "'" | null = null
+  let quote: '"' | "'" | "$'" | null = null
+  let isBacktickInQuote = false
   const cut = () => {
     parts.push(current)
     current = ''
@@ -128,8 +124,16 @@ export const commandSegments = (command: string): string[] => {
       current += char
       continue
     }
+    // In `$'…'` a backslash escapes the next character, so `$'it\'s'` closes on its last quote.
+    if (quote === "$'") {
+      if (char === "'") quote = null
+      current += char === '\\' ? pair : char
+      if (char === '\\') index++
+      continue
+    }
     if (char === '\\') {
-      current += pair
+      // A backslash-newline joins two lines into one, as bash does.
+      if (pair !== '\\\n') current += pair
       index++
       continue
     }
@@ -141,13 +145,25 @@ export const commandSegments = (command: string): string[] => {
         index++
       } else if (char === '`') {
         cut()
+        isBacktickInQuote = true
+        quote = null
       } else {
         if (char === '"') quote = null
         current += char
       }
       continue
     }
-    if (char === "'" || char === '"') {
+    if (char === '#' && /^$|[\s;&|()`<>]/.test(text[index - 1] ?? '')) {
+      // A comment runs to the end of the line, so a quote in it (`# don't`) opens nothing.
+      const end = text.indexOf('\n', index)
+      const stop = end === -1 ? text.length : end
+      current += text.slice(index, stop)
+      index = stop - 1
+    } else if (pair === "$'") {
+      quote = "$'"
+      current += pair
+      index++
+    } else if (char === "'" || char === '"') {
       quote = char
       current += char
     } else if (pair === '&&' || pair === '||') {
@@ -160,42 +176,54 @@ export const commandSegments = (command: string): string[] => {
     } else if (char === ')') {
       cut()
       quote = resumeQuotes.pop() ?? null
-    } else if (';|\n`'.includes(char)) {
+    } else if (char === '`') {
+      cut()
+      if (isBacktickInQuote) quote = '"'
+      isBacktickInQuote = false
+    } else if (';|\n'.includes(char)) {
       cut()
     } else {
       current += char
     }
   }
   cut()
-  return parts.map(part => part.trim().replace(SEGMENT_PREFIX, '')).filter(Boolean)
+  return parts.map(part => part.trim().replace(/^(sudo|command|exec|time|nohup)\s+/, '')).filter(Boolean)
 }
 
-const HEREDOC_OPENER = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/
-// `cat > file <<EOF` and `tee file <<EOF` write their body as data. Any other command (an interpreter such as
-// `python3 - <<EOF`) runs the body as code, which can open a credential file.
-const DATA_WRITER = /\bcat\b[^|;&]*>|\btee\b/
+// `cat` or `tee` writing a heredoc out is data, but only with a quoted delimiter: in a `<<EOF` body `$(…)` and backticks still run.
+// The opener line holds that command alone, after plain `&&` steps at most, so in `echo tee; python3 - <<'EOF'` or
+// `cat <<'EOF' | sh` the body is still read as commands. `\x60` is a backtick, which String.raw cannot hold.
+const STEP = String.raw`[^<>|;&'"\x60\\()#]*`
+const NAME = String.raw`[^\s<>|;&'"\x60\\()#]+`
+const DATA_HEREDOC = new RegExp(
+  String.raw`^(?:${STEP}&&)*\s*(?:cat(?:\s*>>?\s*${NAME})?|tee\s+(?:-a\s+)?${NAME})\s*<<-?\s*(['"])([\w.-]+)\1(?:\s*>>?\s*${NAME})?\s*$`,
+)
+const HEREDOC = /(?<!<)<<(?!<)-?\s*(\\?)(['"]?)([\w.-]+)\2/g
+// ponytail: counts brackets without reading quotes, so a stray `)` in an earlier quote can hide a group; a parser if that matters.
+const isGrouped = (text: string) => (text.match(/[({]/g)?.length ?? 0) > (text.match(/[)}]/g)?.length ?? 0)
 
-// Removes heredoc bodies: every body, or with `onlyData` the bodies that are written to a file as data.
-export const withoutHeredocBodies = (command: string, onlyData: boolean): string => {
+// Drops data heredoc bodies. Any other body is kept, and no line in it opens a data heredoc. Inside an open `{`, `(`, `<(` or `$(` the
+// output of `cat` can go to bash (`{ cat <<'EOF' … } | bash`), so a body there is not data.
+const withoutDataHeredocs = (command: string): string => {
   const kept: string[] = []
-  let ending: string | undefined
-  let isSkipping = false
+  let bodies: { ending: string; isExpanding: boolean }[] = []
+  let isData = false
   for (const line of command.split('\n')) {
-    if (ending !== undefined) {
-      if (line.trim() === ending) {
-        ending = undefined
-        kept.push(line)
-      } else if (!isSkipping) {
-        kept.push(line)
-      }
+    const body = bodies[0]
+    if (body) {
+      if (line.trim() === body.ending) bodies.shift()
+      else if (isData) continue
+      // In a `<<EOF` body quotes and `#` are plain text while `$(…)` and backticks run, so they must not hide what follows.
+      kept.push(body.isExpanding ? line.replace(/['"#]/g, ' ') : line)
       continue
     }
+    // After a trailing `\` the line continues the one before it, so its heredoc can belong to another command.
+    const data = kept.at(-1)?.endsWith('\\') || isGrouped([...kept, line].join('\n')) ? null : DATA_HEREDOC.exec(line)
+    isData = data !== null
+    bodies = data
+      ? [{ ending: data[2] ?? '', isExpanding: false }]
+      : [...line.matchAll(HEREDOC)].map(match => ({ ending: match[3] ?? '', isExpanding: !match[1] && !match[2] }))
     kept.push(line)
-    const opener = HEREDOC_OPENER.exec(line)
-    if (opener) {
-      ending = opener[2]
-      isSkipping = !onlyData || DATA_WRITER.test(line.slice(0, opener.index))
-    }
   }
   return kept.join('\n')
 }
@@ -205,11 +233,10 @@ const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown
 
 export const secretCommand = (command: string, home: string): string | undefined => {
   // A script that prints the whole environment is printenv by another name.
-  if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(command)) return 'printing the whole environment prints secrets'
-  for (const seg of commandSegments(withoutHeredocBodies(command, false))) {
+  const runnable = withoutDataHeredocs(command)
+  if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(runnable)) return 'printing the whole environment prints secrets'
+  for (const seg of commandSegments(runnable)) {
     if (SECRET_COMMANDS.some(r => r.test(seg))) return `\`${seg.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
-  }
-  for (const seg of segments(withoutHeredocBodies(command, true))) {
     const words = seg.split(/\s+|[<>]=?|=/).map(w => w.replace(/^["']|["']$/g, '')).filter(Boolean)
     const cmd = words[0] ?? ''
     if (NON_READING.has(cmd)) continue
