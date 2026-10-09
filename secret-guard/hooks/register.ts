@@ -192,11 +192,12 @@ const commandSegments = (command: string): string[] => {
 
 // `cat` or `tee` writing a heredoc out is data, but only with a quoted delimiter: in a `<<EOF` body `$(…)` and backticks still run.
 // The opener line holds that command alone, after plain `&&` steps at most, so in `echo tee; python3 - <<'EOF'` or
-// `cat <<'EOF' | sh` the body is still read as commands. `\x60` is a backtick, which String.raw cannot hold.
+// `cat <<'EOF' | sh` the body is still read as commands. A file name may be quoted (`"notes with spaces.md"`, `"$DIR/a.md"`), but
+// not hold `$(` or a backtick, and a trailing `# comment` is allowed. `\x60` is a backtick, which String.raw cannot hold.
 const STEP = String.raw`[^<>|;&'"\x60\\()#]*`
-const NAME = String.raw`[^\s<>|;&'"\x60\\()#]+`
+const NAME = String.raw`(?:[^\s<>|;&'"\x60\\()#]|'[^']*'|"(?:[^"\x60\\$]|\$(?!\())*")+`
 const DATA_HEREDOC = new RegExp(
-  String.raw`^(?:${STEP}&&)*\s*(?:cat(?:\s*>>?\s*${NAME})?|tee\s+(?:-a\s+)?${NAME})\s*<<-?\s*(['"])([\w.-]+)\1(?:\s*>>?\s*${NAME})?\s*$`,
+  String.raw`^(?:${STEP}&&)*\s*(?:cat(?:\s*>>?\s*${NAME})?|tee\s+(?:-a\s+)?${NAME})\s*<<-?\s*(['"])([\w.-]+)\1(?:\s*>>?\s*${NAME})?(?:\s+#.*)?\s*$`,
 )
 const HEREDOC = /(?<!<)<<(?!<)-?\s*(\\?)(['"]?)([\w.-]+)\2/g
 // ponytail: counts brackets without reading quotes, so a stray `)` in an earlier quote can hide a group; a parser if that matters.

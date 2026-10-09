@@ -86,8 +86,13 @@ test('quoted patterns and quoted heredocs that cat or tee write out are not comm
   for (const c of ['grep -n -E "(type|interface) (export )?(Foo)" types.d.ts', 'grep -n -E "^\\s{6}(env|session): \\{" types.d.ts',
     `cat > notes.py <<'EOF'\nprint("one .env file")\nexport\nEOF`, `tee -a notes.md <<"EOF"\nsee .env and printenv\nEOF`,
     `cat > a.txt <<'PYEOF'\nenv\nPYEOF\ngit status`, `cat <<'EOF' > notes.py\nload(".env")\nEOF`,
+    `cat > "$TMPDIR/notes.md" <<'EOF'\nprintenv\nEOF`, `cat <<'EOF' > "notes with spaces.md"\nprintenv\nEOF`, `tee 'notes.md' <<'EOF'\ncat .env\nEOF`,
+    `cat >/dev/null <<'EOF' # example\nprintenv\nEOF`,
     `mkdir -p x && cat >x/a.md << 'EOF'\nrun printenv\nEOF`, `cat > dump.js <<'EOF'\nconsole.log(process.env)\nEOF`, `grep $'\\t(export )?' types.d.ts`])
     expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of [`cat > "$(printenv)" <<'EOF'\nplain\nEOF`, `cat > "\`printenv\`.md" <<'EOF'\nplain\nEOF`, `tee "a.md" <<'EOF' | sh\nprintenv\nEOF`,
+    `cat > 'a.md' <<'EOF' # note\nplain\nEOF\nprintenv`])
+    expect(secretCommand(c, HOME)).toBeDefined()
   for (const c of [`python3 - <<'EOF'\nprint(open('.env').read())\nEOF`, 'echo "$(printenv)"', 'echo "a `env` b"', 'echo "`true; printenv`"',
     `cat > a.txt <<'EOF'\nplain\nEOF\nprintenv`, 'grep "x" a.txt; export', 'cat ".env"', 'cat "x|ls" .env'])
     expect(secretCommand(c, HOME)).toBeDefined()
