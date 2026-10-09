@@ -20,9 +20,19 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 ## Limits
 
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.
-- Quoted text is not read as commands, so `grep -E "(export )?" file` runs. A heredoc that `cat` or `tee` writes out with a quoted delimiter is data, so the body of `cat > notes.py <<'EOF'` is not checked when only `&&` steps share its line and no `{`, `(` or `$(` is still open around it. Every other heredoc body is checked like the rest of the command: `python3 - <<'EOF'` runs it as code, and a `<<EOF` body runs any `$(…)` in it, so text there that names a credential file (`.env`) is blocked.
-- Commands are split by a simple reader, not a full shell parser, so a command built to fool it gets through: a heredoc end line with extra spaces or a `\` before it, a delimiter such as `<<$END` or `<<A-B!`, a `<<` inside a quote or comment, nested escaped backticks, `$(( '$(…)' ))`, or a function that redefines `cat` or `tee`. An open `{` or `(` is found by counting brackets, so a quoted bracket before it (`{ echo ")" && cat <<'EOF' … } | bash`) hides it. Known key formats in the output are still hidden.
-- Quotes in a heredoc body that runs are not read, so a quoted `env` or `export` there is blocked: `bash <<'EOF'` with `grep -E "(export )?" f`, or `python3 <<'EOF'` with `print('env')`.
+- The mod does not read quoted text as commands. So `grep -E "(export )?" file` runs.
+- The mod treats a heredoc as data when `cat` or `tee` writes it out with a quoted delimiter, as in `cat > notes.py <<'EOF'`. It does not check that body. This holds only when the opener line has nothing but `&&` steps before it, and no `{`, `(` or `$(` is still open.
+- The mod checks every other heredoc body. `python3 - <<'EOF'` runs its body as code. A `<<EOF` body runs any `$(…)` in it. So a credential file name (`.env`) in such a body is blocked.
+- The mod does not read quotes in a heredoc body that runs. So a quoted `env` or `export` there is blocked, as in `grep -E "(export )?" f` in a `bash <<'EOF'` body, or `print('env')` in a `python3 <<'EOF'` body.
+- The mod splits commands with a simple reader, not a full shell parser. A command built to fool it gets through. Examples:
+  - a heredoc end line with extra spaces, or with a `\` on the line before it
+  - a delimiter such as `<<$END` or `<<A-B!`
+  - a `<<` inside a quote or a comment
+  - nested escaped backticks, or `$(( '$(…)' ))`
+  - a function that redefines `cat` or `tee`
+  - a quoted bracket before an open `{` or `(`, as in `{ echo ")" && cat <<'EOF' … } | bash`, because the mod counts brackets without reading quotes
+
+  The mod still hides known key formats in the output.
 - Secrets in a format it does not know pass through.
 - A name followed by `(` is read as a function call, not a file, so `grep "mock.env(" tests` runs. A zsh glob qualifier on a credential file (`cat .env(N)`) gets through the same way; known key formats in its output are still hidden. Code names such as `process.env`, `import.meta.env` and `c.env` are not files either, but a script that prints the whole environment (`console.log(process.env)`, `print(os.environ)`) is blocked.
 - Commands that touch a credential file without printing it still run: `ls`, `stat`, `test` / `[`, `touch`, `chmod`, `chown`, `rm`. `cp` and `mv` run when the credential file is the target (`cp .env.example .env`), not when it is the source, so a file cannot be copied to a new name and read there.
