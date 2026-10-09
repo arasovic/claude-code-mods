@@ -111,7 +111,8 @@ test('a heredoc body that can run is still read', () => {
 
 test('a comment, a line continuation, a $\'…\' quote or a quote in a <<EOF body hides no command', () => {
   for (const c of [`true # don't log secrets\nprintenv`, `ls # don't\ncat .env`, `echo $(true # don't\nprintenv)`,
-    `printf $'it\\'s done\\n'; printenv`, `ls $'don\\'t'; cat .env`,
+    `printf $'it\\'s done\\n'; printenv`, `ls $'don\\'t'; cat .env`, `python3 - <<'EOF'\nprint("a")\n'''it's'''\nopen(".env")\nEOF`,
+    `python3 - <<'PY'\ns = '''don't'''\nopen("/Users/me/.ssh/id_rsa")\nPY`, `cat <<'EOF' | sh\necho "it's\nprintenv\nEOF`,
     `python3 - <<'PY'\n# don't forget\nprint(open(".env").read())\nPY`, `true && \\\nprintenv`, `true; \\\nprintenv`, `echo "$(\\\nprintenv)"`,
     `cat <<EOF\nVALUE='$(printenv)'\nEOF`, `cat <<EOF\n'$(cat .env)'\nEOF`, `cat <<EOF\n'\`printenv\`'\nEOF`, `cat <<EOF\n# $(printenv)\nEOF`])
     expect(secretCommand(c, HOME)).toBeDefined()

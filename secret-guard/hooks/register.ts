@@ -200,7 +200,7 @@ const NAME = String.raw`(?:[^\s<>|;&'"\x60\\()#]|${QUOTED})+`
 const DATA_HEREDOC = new RegExp(
   String.raw`^(?:${STEP}&&)*\s*(?:cat(?:\s*>>?\s*${NAME})?|tee\s+(?:-a\s+)?${NAME})\s*<<-?\s*(['"])([\w.-]+)\1(?:\s*>>?\s*${NAME})?(?:\s+#.*)?\s*$`,
 )
-const HEREDOC = /(?<!<)<<(?!<)-?\s*(\\?)(['"]?)([\w.-]+)\2/g
+const HEREDOC = /(?<!<)<<(?!<)-?\s*\\?(['"]?)([\w.-]+)\1/g
 // ponytail: counts brackets without reading quotes, so a stray `)` in an earlier quote can hide a group; a parser if that matters.
 const isGrouped = (text: string) => (text.match(/[({]/g)?.length ?? 0) > (text.match(/[)}]/g)?.length ?? 0)
 
@@ -208,23 +208,21 @@ const isGrouped = (text: string) => (text.match(/[({]/g)?.length ?? 0) > (text.m
 // output of `cat` can go to bash (`{ cat <<'EOF' … } | bash`), so a body there is not data.
 const withoutDataHeredocs = (command: string): string => {
   const kept: string[] = []
-  let bodies: { ending: string; isExpanding: boolean }[] = []
+  let endings: string[] = []
   let isData = false
   for (const line of command.split('\n')) {
-    const body = bodies[0]
-    if (body) {
-      if (line.trim() === body.ending) bodies.shift()
+    if (endings.length > 0) {
+      if (line.trim() === endings[0]) endings.shift()
       else if (isData) continue
-      // In a `<<EOF` body quotes and `#` are plain text while `$(…)` and backticks run, so they must not hide what follows.
-      kept.push(body.isExpanding ? line.replace(/['"#]/g, ' ') : line)
+      // A body is not read with shell quotes: in `<<EOF` they are plain text around a running `$(…)`, and python's `'''it's'''`
+      // is an odd count. So quotes and `#` there must not hide what follows.
+      kept.push(line.replace(/['"#]/g, ' '))
       continue
     }
     // After a trailing `\` the line continues the one before it, so its heredoc can belong to another command.
     const data = kept.at(-1)?.endsWith('\\') || isGrouped([...kept, line].join('\n')) ? null : DATA_HEREDOC.exec(line)
     isData = data !== null
-    bodies = data
-      ? [{ ending: data[2] ?? '', isExpanding: false }]
-      : [...line.matchAll(HEREDOC)].map(match => ({ ending: match[3] ?? '', isExpanding: !match[1] && !match[2] }))
+    endings = data ? [data[2] ?? ''] : [...line.matchAll(HEREDOC)].map(match => match[2] ?? '')
     kept.push(line)
   }
   return kept.join('\n')
