@@ -36,6 +36,17 @@ By default the model only suggests a reset and you decide. Two options in `/conf
 
 The tool refuses a call below `contextAt` and a call from a subagent. When you interrupt the turn, no reset runs. The old conversation stays available with `/resume`.
 
+How this differs from Claude Code's own auto-compact:
+
+| | Built-in auto-compact | `contextAction` |
+| --- | --- | --- |
+| Who decides | A fixed threshold near the window limit | The model, at a natural break after `contextAt` |
+| When it runs | Whenever the threshold is crossed, even mid-task | When the turn that called the tool ends |
+| What carries over | The engine's summary | The summary, steered by the model's `next` step, which is also sent as the next prompt |
+| A fresh start | No | With `compact-or-clear`, a `/clear` that needs a written handoff |
+
+Auto-compact stays on. The mod only resets earlier, at a moment the model chooses.
+
 ## Install
 
 ```sh
