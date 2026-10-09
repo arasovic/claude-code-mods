@@ -11,13 +11,28 @@ const PACE_MIN_MS = 10 * 60_000
 const EIGHTHS = ' ▏▎▍▌▋▊▉'
 const KEEP = 30
 
-const LEVELS = [
+export const levels = (contextAt: number) => [
   { id: 'five_hour:80', kind: 'five_hour', at: 80 },
   { id: 'seven_day:80', kind: 'seven_day', at: 80 },
   { id: 'seven_day:90', kind: 'seven_day', at: 90 },
-  { id: 'context:60', kind: 'context', at: 60 },
+  { id: `context:${contextAt}`, kind: 'context', at: contextAt },
 ]
-type Level = (typeof LEVELS)[number]
+type Level = ReturnType<typeof levels>[number]
+// The tool the model calls to compact or clear on its own; registered only when contextAction is not `suggest`.
+const RESET = 'context_reset'
+const RESET_TOOL = 'mcp__session-meter__context_reset'
+// After a clear the model has only the handoff, so one shorter than this cannot carry the goal, state and next step.
+const HANDOFF_MIN = 200
+const ACTIONS = ['suggest', 'compact', 'compact-or-clear'] as const
+export type ContextAction = (typeof ACTIONS)[number]
+
+// A value outside the manifest's choices or range falls back to the default, so a typo can never turn the tool on.
+export const readOptions = (options: Readonly<Record<string, unknown>>) => {
+  const action = ACTIONS.find(a => a === options.contextAction) ?? 'suggest'
+  const at = Number(options.contextAt)
+  return { action, contextAt: Number.isFinite(at) && at >= 10 && at <= 95 ? at : 60 }
+}
+
 const WINDOWS = [
   { kind: 'five_hour', label: '5h' },
   { kind: 'seven_day', label: '7d' },
@@ -38,13 +53,13 @@ const agentTypes = new Map<string, string>()
 const valueOf = (r: MeterReading, kind: string) =>
   kind === 'context' ? (r.context ?? undefined) : r.limits.find(l => l.kind === kind)?.percentUsed
 
-export const cross = (r: MeterReading, firedIds: readonly string[]) => {
+export const cross = (r: MeterReading, firedIds: readonly string[], list = levels(60)) => {
   const kept = firedIds.filter(id => {
-    const level = LEVELS.find(l => l.id === id)
+    const level = list.find(l => l.id === id)
     const value = level && valueOf(r, level.kind)
     return level !== undefined && (value === undefined || value >= level.at - REARM)
   })
-  const fresh = LEVELS.filter(l => !kept.includes(l.id) && (valueOf(r, l.kind) ?? 0) >= l.at)
+  const fresh = list.filter(l => !kept.includes(l.id) && (valueOf(r, l.kind) ?? 0) >= l.at)
   return { fired: [...kept, ...fresh.map(l => l.id)], fresh }
 }
 
@@ -62,7 +77,7 @@ export const elapsed = (ms: number) => {
 
 const resetsIn = (resetsAt: string | undefined, now: number) => (resetsAt ? Date.parse(resetsAt) - now : 0)
 
-export const note = (r: MeterReading, fresh: readonly Level[], now: number) => {
+export const note = (r: MeterReading, fresh: readonly Level[], now: number, action: ContextAction = 'suggest') => {
   const kinds = [...new Set(fresh.map(l => l.kind))]
   const lines = kinds.map(kind => {
     const pct = Math.round(valueOf(r, kind) ?? 0)
@@ -71,6 +86,8 @@ export const note = (r: MeterReading, fresh: readonly Level[], now: number) => {
       return `- The 5-hour usage window is at ${pct}% (resets in ${resets}). Tell the user in one short line. Do not stop or slow down: the session continues automatically at the usage limit, so hitting it only pauses work until the reset.`
     if (kind === 'seven_day')
       return `- The 7-day usage window is at ${pct}% (resets in ${resets}). Warn the user clearly: if it runs out, work stops and does NOT resume on its own when the reset is over 24 hours away. Before starting any large new task, ask the user whether to proceed.`
+    if (action !== 'suggest')
+      return `- The context window is ${pct}% full. At the next natural break, call the ${RESET} tool yourself, as its description says. Do not ask the user first.`
     return `- The context window is ${pct}% full. From now on, when a request starts new work: if it continues the current work, suggest /compact at a natural break; if it is unrelated and needs nothing from this conversation, suggest a fresh session (/clear or a new terminal); if it is new but needs a few facts from here, suggest a short handoff and then a fresh session. If the current request already starts new work, apply this now. Suggest it once; the user decides.`
   })
   return ['session-meter: an automatic note the user does not see. Mention it once; do not repeat it in later replies.', ...lines].join('\n')
@@ -202,6 +219,58 @@ export const meter = (pct: number, w: number): Seg[] => {
   return out
 }
 
+export type Reset = { mode: 'compact'; next: string } | { mode: 'clear'; handoff: string }
+
+// Reads the model's context_reset call: the reset to run after the turn, or why it is refused.
+export const checkReset = (input: Record<string, unknown>, action: ContextAction): Reset | string => {
+  const next = typeof input.next === 'string' ? input.next.trim() : ''
+  const handoff = typeof input.handoff === 'string' ? input.handoff.trim() : ''
+  if (input.mode === 'compact') return next ? { mode: 'compact', next } : 'Give `next`: the step the work continues with after the compaction.'
+  if (input.mode !== 'clear' || action !== 'compact-or-clear') return `mode must be ${action === 'compact-or-clear' ? '"compact" or "clear"' : '"compact"'}.`
+  if (handoff.length < HANDOFF_MIN)
+    return `A clear needs a \`handoff\` of at least ${HANDOFF_MIN} characters: the new session sees nothing else. Give the goal, what is done, the decisions taken, the files that matter and the next step.`
+  return { mode: 'clear', handoff }
+}
+
+const resetSpec = (action: ContextAction) => {
+  const canClear = action === 'compact-or-clear'
+  return {
+    name: RESET,
+    description: [
+      'Compacts this conversation after your turn ends, then sends `next` back to you as a new prompt, so the work goes on without the user.',
+      'Call it yourself, without asking, once session-meter has said the context is full and you reach a natural break: a step is done, nothing is half-edited, and the next step is clear. Never call it in the middle of a step.',
+      ...(canClear
+        ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
+        : []),
+      'After calling it, end your turn with one short line.',
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        mode: { type: 'string', enum: canClear ? ['compact', 'clear'] : ['compact'] },
+        next: { type: 'string', description: 'For compact: the step the work continues with.' },
+        ...(canClear ? { handoff: { type: 'string', description: 'For clear: everything the new session needs, in full.' } } : {}),
+      },
+      required: ['mode'],
+    },
+    isDeferred: false as const,
+  }
+}
+
+// The handoff goes to disk before the clear, so a failed submit cannot lose it.
+const saveHandoff = async ($: EngineInterface, handoff: string) => {
+  const at = new Date(await $.clock.now())
+  const cwd = await $.session.cwd()
+  const sessionId = await $.session.id()
+  const home = (await $.env.get('HOME')) ?? '.'
+  const project = (cwd.split('/').filter(Boolean).pop() ?? 'root').replace(/[^\w.-]+/g, '-')
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}-${pad(at.getHours())}${pad(at.getMinutes())}`
+  const path = `${home}/.claude/handoffs/${stamp}-clear-${project}-${sessionId.slice(0, 8)}.md`
+  await $.fs.write(path, `# Handoff before /clear\n\n- Cwd: ${cwd}\n- Session: ${sessionId}\n\n${handoff}\n`)
+  return path.replace(home, '~')
+}
+
 const refresh = async ($: EngineInterface) => {
   const { context, rateLimits } = await $.session.usage({ breakdown: 'summary' })
   const b = context.breakdown
@@ -232,8 +301,14 @@ const agentLabel = async ($: EngineInterface, id: string | undefined) => {
 }
 
 export const register: Register = (on, options) => {
+  const { action, contextAt } = readOptions(options)
+  const thresholds = levels(contextAt)
+  // ponytail: held in the module, so a hot reload between the call and the turn's end drops the reset.
+  let pending: Reset | undefined
+
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
+    if (action !== 'suggest') await $.tool.register(resetSpec(action))
     await refresh($)
     await sample($, (await read($, reading)).limits)
     if (options.autoOpen !== false) void $.ui.open({ id: PANE, title: 'Session' })
@@ -258,12 +333,53 @@ export const register: Register = (on, options) => {
 
   on('prompt.submit', async ($, e, next) => {
     const r = await read($, reading)
-    const crossed = cross(r, await read($, fired))
+    const crossed = cross(r, await read($, fired), thresholds)
     await update($, fired, () => crossed.fired)
     if (crossed.fresh.length === 0) return next(e)
     const now = await $.clock.now()
     await update($, notes, list => [...list, { at: now, text: noteLabel(crossed.fresh) }].slice(-5))
-    return next({ ...e, context: [...(e.context ?? []), note(r, crossed.fresh, now)] })
+    return next({ ...e, context: [...(e.context ?? []), note(r, crossed.fresh, now, action)] })
+  })
+
+  on('tool.call', { tool: RESET_TOOL }, async ($, e) => {
+    // After a /clear no session.start runs, so the stored reading is stale until measured again.
+    await refresh($)
+    const pct = (await read($, reading)).context ?? 0
+    const reset = checkReset(e as unknown as Record<string, unknown>, action)
+    if (e.agentId !== undefined) return { isError: true as const, result: 'Only the main conversation can reset its context.' }
+    if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
+    if (typeof reset === 'string') return { isError: true as const, result: reset }
+    pending = reset
+    return { result: `The ${reset.mode} runs when this turn ends. End your turn now with one short line.` }
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    const result = await next(e)
+    const job = pending
+    if (e.agentId !== undefined || !job) return result
+    pending = undefined
+    // An interrupted turn hands control back to the user: no reset behind their back.
+    if (e.reason !== 'answer') return result
+    let saved: string | undefined
+    try {
+      if (job.mode === 'compact') {
+        $.ui.toast('session-meter: compacting, then continuing')
+        const done = await $.session.compact({ instructions: `The work continues with: ${job.next}` })
+        if (done.skip !== undefined) {
+          $.ui.toast(`session-meter: compaction skipped: ${done.skip}`)
+          return result
+        }
+        await $.prompt.submit({ text: `session-meter compacted the conversation. Continue: ${job.next}` })
+      } else {
+        saved = await saveHandoff($, job.handoff)
+        $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)
+        await $.command.run({ command: 'clear' })
+        await $.prompt.submit({ text: `session-meter cleared the previous conversation. Its handoff, also saved to ${saved}:\n\n${job.handoff}` })
+      }
+    } catch (err) {
+      $.ui.toast(`session-meter: ${job.mode} failed: ${String(err)}${saved ? `; handoff saved to ${saved}` : ''}`)
+    }
+    return result
   })
 
   on('tool.call', async ($, e, next) => {

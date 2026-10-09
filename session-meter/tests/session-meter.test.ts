@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { braille, cells, cross, duration, elapsed, fit, heaviest, meter, note, pace, target, tokens, toolName } from '../hooks/register'
+import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
 
 const at = (context: number | null, fiveHour?: number, sevenDay?: number) => ({
   context,
@@ -32,6 +32,33 @@ test('both 7-day levels crossing at once make one line; context gets the compact
   expect(text).toContain('/compact')
   expect(duration(90 * 60_000)).toBe('1h30m')
   expect(duration(-5)).toBe('0m')
+})
+
+test('contextAt moves the context level, and contextAction turns the note into a call to context_reset', () => {
+  const now = Date.parse('2026-10-02T08:30:00Z')
+  expect(cross(at(64), [], levels(70)).fresh).toEqual([])
+  const crossed = cross(at(72), [], levels(70))
+  expect(crossed.fresh.map(l => l.id)).toEqual(['context:70'])
+  const text = note(at(72), crossed.fresh, now, 'compact')
+  expect(text).toContain('context window is 72% full')
+  expect(text).toContain('call the context_reset tool yourself')
+  expect(text).not.toContain('suggest /compact')
+})
+
+test('checkReset needs next for a compact and a full handoff for a clear, and clear only when allowed', () => {
+  const handoff = 'Goal: ship the parser. Done: tokenizer and tests. Decisions: no new dependency. Files: src/parse.ts, tests/parse.test.ts. Next: wire the parser into the CLI and run the full test suite before the commit.'
+  expect(checkReset({ mode: 'compact', next: ' run the tests ' }, 'compact')).toEqual({ mode: 'compact', next: 'run the tests' })
+  expect(checkReset({ mode: 'compact' }, 'compact')).toContain('Give `next`')
+  expect(checkReset({ mode: 'clear', handoff }, 'compact')).toBe('mode must be "compact".')
+  expect(checkReset({ mode: 'clear', handoff: 'do the rest' }, 'compact-or-clear')).toContain('at least 200 characters')
+  expect(checkReset({ mode: 'clear', handoff }, 'compact-or-clear')).toEqual({ mode: 'clear', handoff })
+})
+
+test('readOptions falls back to suggest and 60 for values outside the manifest', () => {
+  expect(readOptions({ contextAction: 'compact-or-clear', contextAt: 75 })).toEqual({ action: 'compact-or-clear', contextAt: 75 })
+  expect(readOptions({ contextAction: 'compat', contextAt: 'x' })).toEqual({ action: 'suggest', contextAt: 60 })
+  expect(readOptions({ contextAt: 5 })).toEqual({ action: 'suggest', contextAt: 60 })
+  expect(readOptions({})).toEqual({ action: 'suggest', contextAt: 60 })
 })
 
 test('cells, braille chart, meter and token format', () => {

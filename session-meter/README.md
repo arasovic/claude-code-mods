@@ -19,9 +19,22 @@ It also sends the model one hidden note when a threshold is crossed, and again o
 | --- | --- |
 | 5h window at 80% | Mention it in one line and keep going |
 | 7d window at 80% and 90% | Warn clearly and ask before starting a large task |
-| Context at 60% | When new work starts, suggest `/compact`, a fresh session, or a short handoff, whichever fits |
+| Context at `contextAt` (60%) | When new work starts, suggest `/compact`, a fresh session, or a short handoff, whichever fits |
 
 The note goes in as prompt context, not as a system prompt change, so the prompt cache is not invalidated. The pane lists the last five notes it sent.
+
+## Letting the model reset the context
+
+By default the model only suggests a reset and you decide. Two options in `/config` change that:
+
+| Option | Values | What it does |
+| --- | --- | --- |
+| `contextAction` | `suggest` (default) | The model suggests `/compact` or a fresh session. |
+| | `compact` | The model gets a `context_reset` tool. At a natural break it calls the tool. When the turn ends, the mod compacts the conversation and sends the model its next step, so the work goes on. |
+| | `compact-or-clear` | As `compact`. The model can also choose a clear when the next work does not build on the conversation. A clear needs a handoff of at least 200 characters. The mod saves the handoff to `~/.claude/handoffs/`, runs `/clear`, then sends the handoff as the first message of the new session. |
+| `contextAt` | 10 to 95, default 60 | The context percentage that sends the note. |
+
+The tool refuses a call below `contextAt` and a call from a subagent. When you interrupt the turn, no reset runs. The old conversation stays available with `/resume`.
 
 ## Install
 

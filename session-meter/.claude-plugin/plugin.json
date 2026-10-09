@@ -1,7 +1,7 @@
 {
   "name": "session-meter",
-  "version": "0.3.1",
-  "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold",
+  "version": "0.4.0",
+  "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold, and can let the model compact or clear on its own",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
   "license": "MIT",
@@ -13,6 +13,23 @@
       "description": "Open the session pane on its own when a session starts. Turn off to keep the screen clear; /ctx still opens it, and the notes to the model still go out.",
       "required": false,
       "default": true
+    },
+    "contextAction": {
+      "type": "string",
+      "title": "At the context threshold",
+      "description": "suggest: the model suggests /compact or a fresh session and you decide. compact: the model compacts at a natural break and continues. compact-or-clear: it may also clear, after writing a handoff that starts the new session.",
+      "required": false,
+      "default": "suggest",
+      "options": ["suggest", "compact", "compact-or-clear"]
+    },
+    "contextAt": {
+      "type": "number",
+      "title": "Context threshold (%)",
+      "description": "How full the context window gets before the model is told.",
+      "required": false,
+      "default": 60,
+      "min": 10,
+      "max": 95
     }
   }
 }
