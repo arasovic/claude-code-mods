@@ -203,3 +203,34 @@ test('a headless session gets no context_reset tool and the suggest note', { opt
   expect(text).toContain('suggest /compact')
   expect(text).not.toContain('context_reset')
 })
+
+const PANE = { title: 'Context', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
+
+test('off the terminal only names, targets and labels give way; numbers and titles stay whole', async ($, on) => {
+  mock.clock(on, { now: Date.parse('2026-10-02T08:00:00Z') })
+  const held: Record<string, unknown> = {
+    breakdown: {
+      percent: 42,
+      tokens: 84_000,
+      window: 200_000,
+      threshold: 160_000,
+      categories: [{ name: 'Messages and tool results of this session', tokens: 60_000, color: 'suggestion', kind: 'used' }],
+      heaviest: [{ name: 'A memory file with a long name.md', tokens: 9_000 }],
+    },
+    reading: at(42, 30),
+    tools: [{ id: 't1', name: 'Bash', target: 'npm run build -- --filter every-package-in-this-workspace --verbose', sub: false, at: 0, ms: 3_500, ok: true }],
+    requests: [{ at: 0, agent: 'general-purpose', input: 50_000, cached: 40_000, output: 900, ms: 4_200, model: 'claude-a-model-name-long-enough-to-crowd-the-title' }],
+  }
+  on('state.get', (_$, e) => ({ value: { value: held[e.key], version: 1 } }))
+  const ui = await $.ui.mount({ plugin: 'session-meter', surface: 'desktop', component: 'Pane', props: PANE, requestId: 'ctx' })
+  const texts = (await ui.findAll({ type: 'Text' })).map(r => r.text)
+  const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
+  await ui.unmount()
+  // The long parts arrive whole for the surface to cut.
+  for (const t of ['Messages and tool results of this session', 'npm run build -- --filter every-package-in-this-workspace --verbose', 'general-purpose', 'a-model-name-long-enough-to-crowd-the-title'])
+    expect(texts).toContain(t)
+  for (const t of ['Context', 'Limits', 'Tools', 'Requests', '84.0k', '42%', '60.0k', '160k', '9.0k', '30%', '✓', '3.5s']) expect(kept).toContain(t)
+  // The pace line starts in the limit label's column, not after three spaces.
+  expect(texts).toContain('measuring pace…')
+  expect(texts.some(t => t.startsWith('   measuring'))).toBe(false)
+})
