@@ -11,6 +11,8 @@ Adds a summary line under each answer and names the running tool in the spinner.
 
 Subagent work counts toward the turn that started it.
 
+The summary line shows in the terminal only. The Claude desktop app does not draw the "Worked for …" line, so the summary has no place to go there.
+
 ## Install
 
 ```sh
