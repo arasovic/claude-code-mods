@@ -231,3 +231,23 @@ test('with scheduled off (the default), start runs no scan', async ($, on) => {
   expect(argvs).toEqual([])
   expect(held.broken).toEqual([])
 })
+
+test('off the terminal a run row cuts its name and keeps the bar and time on its line', async ($, on) => {
+  const watch: CiWatchItem = { id: 'w1', label: 'push fix/a-branch-name-long-enough-to-crowd-the-row', runs: [{ name: 'CI', elapsedMs: 65_000, expectedMs: 120_000 }] }
+  on('state.get', (_$, e) => ({ value: { value: e.key === 'watches' ? [watch] : [], version: 1 } }))
+  // Beneath the plugin the test stands for the engine's own band.
+  on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Box', children: [] }))
+  const props = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 60, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+  const draw = async (surface: 'terminal' | 'desktop') => {
+    const ui = await $.ui.mount({ plugin: 'ci-watch', surface, component: 'AbovePrompt', props })
+    const texts = await ui.findAll({ type: 'Text' })
+    const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
+    await ui.unmount()
+    return { texts, kept }
+  }
+  const desktop = await draw('desktop')
+  expect(desktop.texts.find(t => t.text.startsWith('⟳ push'))?.props.wrap).toBe('truncate-end')
+  expect(desktop.kept).toEqual([` ${bar(65_000, 120_000)} 1m05s / ~2m00s`])
+  // The terminal keeps its one line of text.
+  expect((await draw('terminal')).texts.map(t => t.text)).toContain(`⟳ ${watch.label} · CI ${bar(65_000, 120_000)} 1m05s / ~2m00s`)
+})
