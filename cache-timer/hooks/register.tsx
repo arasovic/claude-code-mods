@@ -107,3 +107,5 @@ export const register: Register = on => {
   on('session.end', async ($, e, next) => (await forget($), next(e)))
   on('session.compact', async ($, e, next) => (await forget($), next(e)))
 }
+
+// CI probe: a hook change without a version bump.
