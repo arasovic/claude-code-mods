@@ -161,9 +161,10 @@ export const toolName = (tool: string) => (tool.startsWith('mcp__') ? (tool.spli
 
 // Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
 // Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
-// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), a Bar draws `parts` as real
-// bars in place of its `cells`, a Spark draws a bar per value, and a Group takes an equal share of the line.
-export type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), `keep` never gives way when
+// the line runs short, a Bar draws `parts` as real bars in place of its `cells`, a Spark draws a bar per value,
+// and a Group takes an equal share of the line.
+export type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean; keep?: boolean }
 type Bar = { cells: Seg[]; parts: { n: number; c?: string }[] }
 type Spark = { spark: readonly number[]; max: number; c: string }
 type Group = { group: Row }
@@ -455,7 +456,7 @@ export const register: Register = (on, options) => {
           )
         if (s.fill) return <Box flexGrow={1} />
         const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
-        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+        return s.w || s.keep ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
       })
     const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
@@ -463,9 +464,11 @@ export const register: Register = (on, options) => {
         return (
           <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
             <Box marginBottom={1}>
-              <Text color={tone} bold>{title}</Text>
+              <Box flexShrink={0}>
+                <Text color={tone} bold>{title}</Text>
+              </Box>
               <Box flexGrow={1} />
-              {right ? <Text dimColor>{right}</Text> : null}
+              {right ? <Text dimColor wrap="truncate-end">{right}</Text> : null}
             </Box>
             {rows.map(line)}
           </Box>
@@ -508,7 +511,8 @@ export const register: Register = (on, options) => {
       ...used.map(c => ({ mark: '■', c: c.color, name: c.name, n: tokens(c.tokens) })),
       ...(b.threshold === undefined ? [] : [{ mark: isGrid ? '┊' : '■', c: isGrid ? 'warning' : 'diffRemovedDimmed', name: 'compacts at', n: tokens(b.threshold) }]),
     ]
-    const key = (k: (typeof keys)[number]): Row => spread([{ t: `${k.mark} `, c: k.c }, { t: k.name.slice(0, colW - k.n.length - 3) }], [{ t: k.n, d: true }], colW)
+    const key = (k: (typeof keys)[number]): Row =>
+      spread([{ t: `${k.mark} `, c: k.c, keep: true }, { t: isGrid ? k.name.slice(0, colW - k.n.length - 3) : k.name }], [{ t: k.n, d: true, keep: true }], colW)
     const legend: Row[] = []
     for (let i = 0; i < keys.length; i += 2) {
       const [a, z] = [keys[i], keys[i + 1]]
@@ -521,7 +525,7 @@ export const register: Register = (on, options) => {
     const chart = turns.length < 2 ? [] : braille(turns, b.window, chartCols, 2)
     const change: Seg = { t: `${delta !== undefined && delta >= 0 ? '+' : '-'}${tokens(Math.abs(delta ?? 0))}`, b: true }
     const contextRows: Row[] = [
-      spread([{ t: tokens(b.tokens), b: true }, { t: ` of ${tokens(b.window)}`, d: true }], [{ t: `${Math.round(b.percent)}%`, c: zone(b.percent), b: true }], inner),
+      spread([{ t: tokens(b.tokens), b: true, keep: true }, { t: ` of ${tokens(b.window)}`, d: true }], [{ t: `${Math.round(b.percent)}%`, c: zone(b.percent), b: true, keep: true }], inner),
       [],
       [{ cells: bar, parts }],
       [],
@@ -535,13 +539,13 @@ export const register: Register = (on, options) => {
               [{ t: chart[1] ?? '', c: 'suggestion' }, { t: '  last turn', d: true }],
             ]
           : [[{ spark: turns.slice(-chartCols * 2), max: b.window, c: 'suggestion' }, { t: '  ' }, change, { t: '  last turn', d: true }]]),
-      ...(b.heaviest.length ? [[] as Row, ...b.heaviest.map(item => spread([{ t: '▸ ', d: true }, { t: item.name }], [{ t: tokens(item.tokens), d: true }], inner))] : []),
+      ...(b.heaviest.length ? [[] as Row, ...b.heaviest.map(item => spread([{ t: '▸ ', d: true }, { t: item.name }], [{ t: tokens(item.tokens), d: true, keep: true }], inner))] : []),
     ]
 
     // Limits: each window's meter, its reset, and whether the current pace lasts until then.
     const limitRows: Row[] = []
     const tones: string[] = []
-    const glance: Row = [{ t: 'ctx ', d: true }, { t: `${Math.round(b.percent)}%`, c: zone(b.percent), b: true }]
+    const glance: Row = [{ t: 'ctx ', d: true }, { t: `${Math.round(b.percent)}%`, c: zone(b.percent), b: true, keep: true }]
     for (const win of WINDOWS) {
       const limit = r.limits.find(l => l.kind === win.kind)
       if (!limit) continue
@@ -557,18 +561,20 @@ export const register: Register = (on, options) => {
         { t: ` ${pct} `, c: tone, b: true, w: 6, right: true },
         { t: reset, d: true, w: 8, right: true },
       ])
+      // The pace line starts under the meter: three cells on the grid, the label's column elsewhere.
+      const under: Seg = isGrid ? { t: '   ' } : { t: '', w: 3 }
       limitRows.push(
         p.kind === 'measuring'
-          ? [{ t: '   measuring pace…', d: true }]
+          ? [under, { t: 'measuring pace…', d: true }]
           : p.kind === 'full'
-            ? [{ t: `   full in ~${duration(p.inMs)} at this pace`, c: tone }]
-            : [{ t: '   lasts until the reset at this pace', d: true }],
+            ? [under, { t: `full in ~${duration(p.inMs)} at this pace`, c: tone }]
+            : [under, { t: 'lasts until the reset at this pace', d: true }],
       )
-      glance.push({ t: `   ${win.label} `, d: true }, { t: `${Math.round(limit.percentUsed)}%`, c: tone, b: true })
+      glance.push({ t: `   ${win.label} `, d: true }, { t: `${Math.round(limit.percentUsed)}%`, c: tone, b: true, keep: true })
     }
     // toTimeString starts with the local HH:MM:SS.
     const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
-    if (sent.length) limitRows.push([], ...sent.map(n => [{ t: `${hhmm(n.at)} `, d: true }, { t: `note sent: ${n.text}` }]))
+    if (sent.length) limitRows.push([], ...sent.map(n => [{ t: `${hhmm(n.at)} `, d: true, keep: true }, { t: `note sent: ${n.text}` }]))
     const limitTone = tones.includes('error') ? 'error' : tones.includes('warning') ? 'warning' : 'success'
 
     // Tools and Requests share the rows left below; each keeps at least three.
@@ -584,21 +590,28 @@ export const register: Register = (on, options) => {
       ? shown.map(t => {
           const icon = t.ok === undefined ? { t: '◌', c: 'warning' } : t.ok ? { t: '✓', c: 'success' } : { t: '✗', c: 'error' }
           const time = t.ms === undefined ? '…' : elapsed(t.ms)
-          return spread([icon, { t: ` ${(t.sub ? `↳${t.name}` : t.name).padEnd(7)} `, b: !t.sub, d: t.sub, w: 11 }, { t: t.target.slice(0, inner - 16), d: true }], [{ t: time, d: true }], inner)
+          // Off the grid the surface cuts the target, and the time never gives way.
+          return spread(
+            [{ ...icon, keep: true }, { t: ` ${(t.sub ? `↳${t.name}` : t.name).padEnd(7)} `, b: !t.sub, d: t.sub, w: 11 }, { t: isGrid ? t.target.slice(0, inner - 16) : t.target, d: true }],
+            [{ t: time, d: true, keep: true }],
+            inner,
+          )
         })
       : [[{ t: 'No tool calls yet.', d: true }]]
     const toolTone = shown.find(t => t.ok !== undefined)?.ok === false ? 'error' : 'success'
 
     // A right-aligned column n wide.
     const num = (t: string, n: number, s: Omit<Seg, 't'> = {}): Seg => ({ ...s, t: t.padStart(n), w: n, right: true })
+    // The loop column; off the grid it gives way, so the four numbers stay inside a narrow pane.
+    const loop = (s: Seg): Row => (isGrid ? [s] : [{ ...s, t: s.t.trimEnd(), w: undefined }, { t: '', fill: true }])
     const askRows: Row[] = asks.length
       ? [
-          [{ t: 'loop'.padEnd(10), d: true, w: 10 }, num('in', 6, { d: true }), num('out', 6, { d: true }), num('cache', 7, { d: true }), num('time', 7, { d: true })],
+          [...loop({ t: 'loop'.padEnd(10), d: true, w: 10 }), num('in', 6, { d: true }), num('out', 6, { d: true }), num('cache', 7, { d: true }), num('time', 7, { d: true })],
           ...asks.slice(0, askCount).map(q => {
             const hit = q.input ? Math.round((q.cached / q.input) * 100) : 0
             const cacheTone = hit < 20 ? 'error' : hit < 50 ? 'warning' : undefined
             return [
-              { t: q.agent.padEnd(10).slice(0, 10), b: q.agent === 'main', d: q.agent !== 'main', w: 10 },
+              ...loop({ t: isGrid ? q.agent.padEnd(10).slice(0, 10) : q.agent, b: q.agent === 'main', d: q.agent !== 'main', w: 10 }),
               num(tokens(q.input), 6),
               num(tokens(q.output), 6),
               num(`${hit}%`, 7, { c: cacheTone, d: cacheTone === undefined }),
