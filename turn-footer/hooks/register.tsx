@@ -97,17 +97,19 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {drawn}
-        <Text>
-          <Text>{'  '}</Text>
-          {summary(found.stats).map((p, i) => (
-            <Text key={String(i)}>
-              {i ? <Text dimColor>{'  ·  '}</Text> : null}
-              <Text color={p.c} dimColor={p.c === undefined}>
-                {p.t}
+        {/* Padding, not spaces: spaces in a proportional font fall short of two cells. */}
+        <Box paddingLeft={2}>
+          <Text>
+            {summary(found.stats).map((p, i) => (
+              <Text key={String(i)}>
+                {i ? <Text dimColor>{'  ·  '}</Text> : null}
+                <Text color={p.c} dimColor={p.c === undefined}>
+                  {p.t}
+                </Text>
               </Text>
-            </Text>
-          ))}
-        </Text>
+            ))}
+          </Text>
+        </Box>
       </Box>
     )
   })
