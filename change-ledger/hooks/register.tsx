@@ -102,9 +102,9 @@ const refreshGit = async ($: EngineInterface) => {
 
 // Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
 // Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
-// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), and a Bar draws `parts`
-// as real bars in place of its `cells`, `w` wide or stretching.
-type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), `keep` never gives way
+// when the line runs short, and a Bar draws `parts` as real bars in place of its `cells`, `w` wide or stretching.
+type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean; keep?: boolean }
 type Bar = { cells: Seg[]; parts: { n: number; c?: string }[]; w?: number }
 type Row = (Seg | Bar)[]
 
@@ -195,7 +195,7 @@ export const register: Register = on => {
         }
         if (s.fill) return <Box flexGrow={1} />
         const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
-        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+        return s.w || s.keep ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
       })
     const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
@@ -203,9 +203,11 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
             <Box marginBottom={1}>
-              <Text color={tone} bold>{title}</Text>
+              <Box flexShrink={0}>
+                <Text color={tone} bold>{title}</Text>
+              </Box>
               <Box flexGrow={1} />
-              {right ? <Text dimColor>{right}</Text> : null}
+              {right ? <Text dimColor wrap="truncate-end">{right}</Text> : null}
             </Box>
             {rows.map(line)}
           </Box>
@@ -241,9 +243,15 @@ export const register: Register = on => {
     const added = list.reduce((n, f) => n + f.added, 0)
     const removed = list.reduce((n, f) => n + f.removed, 0)
     const glance: Row = list.length
-      ? [{ t: `${list.length} ${list.length === 1 ? 'file' : 'files'}  `, b: true }, { t: `+${added}`, c: 'success' }, { t: ` −${removed}`, c: 'error' }]
+      ? [{ t: `${list.length} ${list.length === 1 ? 'file' : 'files'}  `, b: true, keep: true }, { t: `+${added}`, c: 'success', keep: true }, { t: ` −${removed}`, c: 'error', keep: true }]
       : [{ t: 'No edits yet', d: true }]
-    if (tree) glance.push({ t: `   ${tree.branch}`, c: 'suggestion' }, ...(tree.ahead ? [{ t: ` ↑${tree.ahead}`, d: true }] : []), ...(tree.behind ? [{ t: ` ↓${tree.behind}`, c: 'warning' }] : []))
+    // Off the grid only the branch name gives way.
+    if (tree)
+      glance.push(
+        { t: `   ${tree.branch}`, c: 'suggestion' },
+        ...(tree.ahead ? [{ t: ` ↑${tree.ahead}`, d: true, keep: true }] : []),
+        ...(tree.behind ? [{ t: ` ↓${tree.behind}`, c: 'warning', keep: true }] : []),
+      )
 
     // The git frame lists every changed path: the ones this session edited get a filled dot, the rest (shell, you) an empty one.
     const touched = new Set(list.map(f => f.path))
@@ -253,8 +261,8 @@ export const register: Register = on => {
         ? tree.files.slice(0, GIT_MAX).map(f => {
             const mine = touched.has(`${tree.root}/${f.path}`)
             const tone = f.status === '??' || f.status === 'A' ? 'success' : f.status === 'D' ? 'error' : 'warning'
-            const right: Row = f.added === undefined ? [{ t: f.status === '??' ? 'new' : '', d: true }] : counts(f.added, f.removed ?? 0)
-            return spread([{ t: mine ? '● ' : '○ ', c: mine ? 'suggestion' : undefined, d: !mine }, { t: f.status.padEnd(3), c: tone, w: 3 }, { t: f.path, d: !mine }], right, inner)
+            const right: Row = f.added === undefined ? [{ t: f.status === '??' ? 'new' : '', d: true, keep: true }] : counts(f.added, f.removed ?? 0)
+            return spread([{ t: mine ? '● ' : '○ ', c: mine ? 'suggestion' : undefined, d: !mine, keep: true }, { t: f.status.padEnd(3), c: tone, w: 3 }, { t: f.path, d: !mine }], right, inner)
           })
         : [[{ t: 'Working tree clean.', d: true }]]
       : []
@@ -269,7 +277,7 @@ export const register: Register = on => {
       ? shown.flatMap((f, i) => {
           const bar = statBar(f.added, f.removed, max, 8)
           const top = spread(
-            [{ t: name(f.path), b: true }, ...(f.created ? [{ t: ' new', c: 'success' }] : [])],
+            [{ t: name(f.path), b: true }, ...(f.created ? [{ t: ' new', c: 'success', keep: true }] : [])],
             [
               {
                 cells: [{ t: '■'.repeat(bar.plus), c: 'success' }, { t: '■'.repeat(bar.minus), c: 'error' }, { t: '·'.repeat(bar.rest), d: true }],
@@ -280,7 +288,7 @@ export const register: Register = on => {
             ],
             inner,
           )
-          const sub = spread([{ t: `  ${folder(f.path, cwd)}`, d: true }], [{ t: `${f.agents.join(', ')} · ${f.edits}× · ${ago(now - f.at)}`, d: true }], inner)
+          const sub = spread([{ t: `  ${folder(f.path, cwd)}`, d: true }], [{ t: f.agents.join(', '), d: true }, { t: ` · ${f.edits}× · ${ago(now - f.at)}`, d: true, keep: true }], inner)
           return i ? [[], top, sub] : [top, sub]
         })
       : [[{ t: 'Files Claude edits or writes show here.', d: true }]]
