@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
 
 import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
 
@@ -116,8 +117,8 @@ test('heaviest groups MCP tools by server and keeps the top three', () => {
   ])
 })
 
-test('prompt.submit attaches the note only on the turn a level is crossed', async ($, on) => {
-  mock.clock(on)
+// The plugin's $.state, kept in memory for the hook tests.
+const memoryState = (on: On) => {
   const held = new Map<string, unknown>()
   let version = 0
   on('state.get', (_$, e) => ({ value: { value: held.get(e.key), version } }))
@@ -126,6 +127,11 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
     version += 1
     return { value: { isSet: true as const, version } }
   })
+}
+
+test('prompt.submit attaches the note only on the turn a level is crossed', async ($, on) => {
+  mock.clock(on)
+  memoryState(on)
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   const seen: (readonly string[] | undefined)[] = []
   on('prompt.submit', (_$, e) => {
@@ -145,4 +151,36 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
   expect(seen[0]).toBeUndefined()
   expect(seen[1]?.[0]).toContain('5-hour usage window is at 85%')
   expect(seen[2]).toBeUndefined()
+})
+
+test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  mock.clock(on)
+  memoryState(on)
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
+  const tools: string[] = []
+  on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 80 }, rateLimits: [] } }))
+  const compacts: unknown[] = []
+  on('session.compact', (_$, e) => (compacts.push(e.instructions), { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
+  const submits: string[] = []
+  on('prompt.submit', (_$, e) => (submits.push(e.text), { text: e.text }))
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  const toasts: string[] = []
+  on('ui.toast', (_$, e) => (toasts.push(e.text), { value: undefined }))
+  const reset = async (input: Record<string, string>) => {
+    await $.tool.call({ tool: 'mcp__session-meter__context_reset', ...input })
+    await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  }
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  expect(tools).toEqual(['context_reset'])
+  await reset({ mode: 'compact', next: 'run the tests' })
+  expect(compacts).toEqual(['The work continues with: run the tests'])
+  expect(submits).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
+
+  await reset({ mode: 'compact' })
+  expect(compacts).toEqual(['The work continues with: run the tests', undefined])
+  expect(submits).toHaveLength(1)
+  expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
 })
