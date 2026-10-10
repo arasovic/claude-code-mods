@@ -64,7 +64,7 @@
     {
       "name": "guardrails",
       "source": "./guardrails",
-      "description": "Blocks Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names"
+      "description": "Blocks shell commands you pick in /config: Cloudflare cf writes, attribution lines in commits and PRs, claude/ branch names. All rules start off"
     },
     {
       "name": "pin-board",

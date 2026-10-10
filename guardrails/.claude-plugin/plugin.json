@@ -1,8 +1,31 @@
 {
   "name": "guardrails",
-  "version": "0.3.1",
-  "description": "Blocks Cloudflare write commands, attribution lines in commits and PRs, and claude/ branch names",
+  "version": "0.4.0",
+  "description": "Blocks shell commands you pick in /config: Cloudflare cf writes, attribution lines in commits and PRs, claude/ branch names. All rules start off",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "cfWrites": {
+      "type": "boolean",
+      "title": "Block cf deploy, migrate, init",
+      "description": "Refuse Cloudflare's cf CLI write commands, so deploys and migrations stay in your own hands.",
+      "required": false,
+      "default": false
+    },
+    "attribution": {
+      "type": "boolean",
+      "title": "Block attribution lines",
+      "description": "Refuse git commit, gh pr and gh issue commands that carry a Co-Authored-By or \"Generated with Claude\" line. Claude retries without it.",
+      "required": false,
+      "default": false
+    },
+    "claudeBranches": {
+      "type": "boolean",
+      "title": "Block claude/ branch names",
+      "description": "Refuse creating or pushing a branch named claude/…. Claude retries with a purpose prefix such as fix/ or chore/.",
+      "required": false,
+      "default": false
+    }
+  }
 }

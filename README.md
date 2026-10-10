@@ -132,9 +132,9 @@ These draw little or nothing. They step in when something goes wrong.
   <tr>
     <td width="50%" valign="top">
       <h3><a href="guardrails/README.md">guardrails</a></h3>
-      <p><b>Blocks the commands you never want run.</b> Cloudflare writes, attribution lines in commits and PRs, and <code>claude/</code> branch names. Claude gets the reason back and retries the right way.</p>
-      <pre>guardrails: Branches never use the claude/ prefix;
-use fix/, style/, chore/ etc.</pre>
+      <p><b>Blocks the commands you never want run.</b> Pick rules in <code>/config</code>: Cloudflare <code>cf</code> writes, attribution lines in commits and PRs, <code>claude/</code> branch names. All start off. Claude gets the reason back and retries the right way.</p>
+      <pre>guardrails: Branch names may not start with claude/;
+use a purpose prefix such as fix/ or chore/.</pre>
     </td>
     <td width="50%" valign="top">
       <h3><a href="compact-keeper/README.md">compact‑keeper</a></h3>
