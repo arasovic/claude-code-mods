@@ -22,7 +22,7 @@ Turn a rule on in `/config`, or in `~/.claude/settings.json`:
 }
 ```
 
-`attribution` is a backstop. To stop Claude Code from adding attribution in the first place, set `"attribution": false` in `settings.json`.
+The `attribution` rule is a backstop. To stop Claude Code from adding attribution in the first place, set Claude Code's own top-level `"attribution": false` in `settings.json`.
 
 Reading credential files is [secret-guard](../secret-guard/README.md)'s job.
 
