@@ -1,6 +1,6 @@
 {
   "name": "session-meter",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold, and can let the model compact or clear on its own",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
@@ -17,7 +17,7 @@
     "contextAction": {
       "type": "string",
       "title": "At the context threshold",
-      "description": "suggest: the model suggests /compact or a fresh session and you decide. compact: the model compacts at a natural break and continues. compact-or-clear: it may also clear, after writing a handoff that starts the new session.",
+      "description": "suggest: the model suggests /compact or a fresh session and you decide. compact: the model compacts at a natural break and continues, or waits for you when the next step is yours. compact-or-clear: it may also clear, after writing a handoff that starts the new session. A headless run (-p, SDK) always gets suggest.",
       "required": false,
       "default": "suggest",
       "options": ["suggest", "compact", "compact-or-clear"]
