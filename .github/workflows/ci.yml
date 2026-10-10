@@ -65,3 +65,18 @@ jobs:
             fi
           done
           exit $status
+
+      # Rebase merges keep each commit's message, so these lines would land on main as written.
+      - name: Check commit messages
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          status=0
+          for c in $(git rev-list --no-merges "$BASE"..HEAD); do
+            if git log -1 --format=%B "$c" | grep -qiE '^co-authored-by:|generated with \[?claude'; then
+              echo "::error::Commit $(git rev-parse --short "$c"): this repo keeps Co-Authored-By and tool attribution lines out of commit messages"
+              status=1
+            fi
+          done
+          exit $status
