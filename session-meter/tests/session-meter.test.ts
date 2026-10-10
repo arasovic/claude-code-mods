@@ -224,8 +224,13 @@ test('off the terminal only names, targets and labels give way; numbers and titl
   on('state.get', (_$, e) => ({ value: { value: held[e.key], version: 1 } }))
   const ui = await $.ui.mount({ plugin: 'session-meter', surface: 'desktop', component: 'Pane', props: PANE, requestId: 'ctx' })
   const texts = (await ui.findAll({ type: 'Text' })).map(r => r.text)
-  const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
+  const boxes = await ui.findAll({ type: 'Box' })
+  const kept = boxes.filter(b => b.props.flexShrink === 0).map(b => b.text)
+  const spacers = boxes.filter(b => b.props.flexGrow === 1 && !b.children.length)
   await ui.unmount()
+  // A spacer never closes up, so a cut target keeps a gap before its time.
+  expect(spacers.length).toBeGreaterThan(0)
+  for (const b of spacers) expect(b.props.minWidth).toBe(1)
   // The long parts arrive whole for the surface to cut.
   for (const t of ['Messages and tool results of this session', 'npm run build -- --filter every-package-in-this-workspace --verbose', 'general-purpose', 'a-model-name-long-enough-to-crowd-the-title'])
     expect(texts).toContain(t)

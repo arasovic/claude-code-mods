@@ -454,7 +454,8 @@ export const register: Register = (on, options) => {
               {s.spark.map(v => <Box flexGrow={1} height={`${Math.max(1, Math.round((Math.min(v, s.max) / Math.max(1, s.max)) * 100))}%`} backgroundColor={s.c} />)}
             </Box>
           )
-        if (s.fill) return <Box flexGrow={1} />
+        // As on the grid, a spacer keeps at least a cell, so a cut name never runs into the number after it.
+        if (s.fill) return <Box flexGrow={1} minWidth={1} />
         const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
         return s.w || s.keep ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
       })
@@ -467,7 +468,7 @@ export const register: Register = (on, options) => {
               <Box flexShrink={0}>
                 <Text color={tone} bold>{title}</Text>
               </Box>
-              <Box flexGrow={1} />
+              <Box flexGrow={1} minWidth={1} />
               {right ? <Text dimColor wrap="truncate-end">{right}</Text> : null}
             </Box>
             {rows.map(line)}
