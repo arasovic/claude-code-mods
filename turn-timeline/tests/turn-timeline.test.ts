@@ -93,7 +93,8 @@ test('a long target is cut before its duration, and long names keep a blank cell
   engine(on)
   await $.turn.start({ text: 'hi', turnId: 't' })
   await $.tool.call({ tool: 'Bash', command: 'npm run build -- --filter every-package-in-this-workspace --verbose --no-cache' })
-  await $.tool.call({ tool: 'WebSearch', query: 'claude code mods', mode: 'standard' })
+  // WebSearch's input differs by account (some have `mode`), so the call is not held to one schema.
+  await $.tool.call({ tool: 'WebSearch', query: 'claude code mods' } as never)
   await $.tool.call({ tool: 'mcp__github__create_pull_request', title: 'fix' } as never)
   await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
   await complete($)
