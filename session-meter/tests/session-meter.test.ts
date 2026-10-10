@@ -153,7 +153,8 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
   expect(seen[2]).toBeUndefined()
 })
 
-test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+// A session at 80% context whose engine calls the reset path makes are recorded.
+const resetSession = (on: On) => {
   mock.clock(on)
   memoryState(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -163,11 +164,16 @@ test('a compact with next submits it as the next prompt, and one without next wa
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 80 }, rateLimits: [] } }))
   const compacts: unknown[] = []
   on('session.compact', (_$, e) => (compacts.push(e.instructions), { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
-  const submits: string[] = []
-  on('prompt.submit', (_$, e) => (submits.push(e.text), { text: e.text }))
+  const submits: { text: string; context?: readonly string[] }[] = []
+  on('prompt.submit', (_$, e) => (submits.push({ text: e.text, context: e.context }), { text: e.text }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   const toasts: string[] = []
   on('ui.toast', (_$, e) => (toasts.push(e.text), { value: undefined }))
+  return { tools, compacts, submits, toasts }
+}
+
+test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { tools, compacts, submits, toasts } = resetSession(on)
   const reset = async (input: Record<string, string>) => {
     await $.tool.call({ tool: 'mcp__session-meter__context_reset', ...input })
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
@@ -177,10 +183,23 @@ test('a compact with next submits it as the next prompt, and one without next wa
   expect(tools).toEqual(['context_reset'])
   await reset({ mode: 'compact', next: 'run the tests' })
   expect(compacts).toEqual(['The work continues with: run the tests'])
-  expect(submits).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
+  expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
 
   await reset({ mode: 'compact' })
   expect(compacts).toEqual(['The work continues with: run the tests', undefined])
   expect(submits).toHaveLength(1)
   expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
+})
+
+test('a headless session gets no context_reset tool and the suggest note', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { tools, submits } = resetSession(on)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })
+
+  expect(tools).toEqual([])
+  const text = submits[0]?.context?.join('\n') ?? ''
+  expect(text).toContain('context window is 80% full')
+  expect(text).toContain('suggest /compact')
+  expect(text).not.toContain('context_reset')
 })
