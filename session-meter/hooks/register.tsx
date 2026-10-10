@@ -306,10 +306,13 @@ export const register: Register = (on, options) => {
   const thresholds = levels(contextAt)
   // ponytail: held in the module, so a hot reload between the call and the turn's end drops the reset.
   let pending: Reset | undefined
+  // A headless run (-p, SDK) cannot compact from a hook and ends with the turn, so the tool would only stop the work.
+  let live: ContextAction = 'suggest'
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
-    if (action !== 'suggest') await $.tool.register(resetSpec(action))
+    live = e.isInteractive ? action : 'suggest'
+    if (live !== 'suggest') await $.tool.register(resetSpec(live))
     await refresh($)
     await sample($, (await read($, reading)).limits)
     if (options.autoOpen !== false) void $.ui.open({ id: PANE, title: 'Session' })
@@ -339,7 +342,7 @@ export const register: Register = (on, options) => {
     if (crossed.fresh.length === 0) return next(e)
     const now = await $.clock.now()
     await update($, notes, list => [...list, { at: now, text: noteLabel(crossed.fresh) }].slice(-5))
-    return next({ ...e, context: [...(e.context ?? []), note(r, crossed.fresh, now, action)] })
+    return next({ ...e, context: [...(e.context ?? []), note(r, crossed.fresh, now, live)] })
   })
 
   on('tool.call', { tool: RESET_TOOL }, async ($, e) => {

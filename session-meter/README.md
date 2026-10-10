@@ -34,7 +34,7 @@ By default the model only suggests a reset and you decide. Two options in `/conf
 | | `compact-or-clear` | As `compact`. The model can also choose a clear when the next work does not build on the conversation. A clear needs a handoff of at least 200 characters. The mod saves the handoff to `~/.claude/handoffs/`, runs `/clear`, then sends the handoff as the first message of the new session. |
 | `contextAt` | 10 to 95, default 60 | The context percentage that sends the note. |
 
-The tool refuses a call below `contextAt` and a call from a subagent. When you interrupt the turn, no reset runs. The old conversation stays available with `/resume`.
+The tool refuses a call below `contextAt` and a call from a subagent. A headless run (`claude -p`, the SDK) gets no tool and only the suggestion, since the mod cannot compact there. When you interrupt the turn, no reset runs. The old conversation stays available with `/resume`.
 
 How this differs from Claude Code's own auto-compact:
 
