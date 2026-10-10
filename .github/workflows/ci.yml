@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Fork PRs run their own code here, so the token reads only and the job holds no secrets.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # ponytail: bumped by hand with each Claude Code release the mods are tested on.
+  CLAUDE_CODE_VERSION: 2.1.296
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - run: npm install --global "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+
+      - name: Test and validate every mod
+        run: |
+          status=0
+          for manifest in */.claude-plugin/plugin.json; do
+            mod=${manifest%%/*}
+            echo "::group::$mod"
+            claude plugin test "$mod" || status=1
+            claude plugin validate --strict "$mod" || status=1
+            echo "::endgroup::"
+          done
+          claude plugin validate --strict . || status=1
+          exit $status
+
+      - name: Type-check every mod
+        run: ./typecheck.sh
+
+      # A mod changed past its tests and docs reaches installs only with a new version.
+      - name: Check version bumps
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          status=0
+          for mod in $(git diff --name-only "$BASE"...HEAD -- ':!*/tests/*' ':!*.md' | grep / | cut -d/ -f1 | sort -u); do
+            [ -f "$mod/.claude-plugin/plugin.json" ] || continue
+            git cat-file -e "$BASE:$mod/.claude-plugin/plugin.json" 2>/dev/null || continue
+            old=$(git show "$BASE:$mod/.claude-plugin/plugin.json" | jq -r .version)
+            new=$(jq -r .version "$mod/.claude-plugin/plugin.json")
+            if [ "$old" = "$new" ]; then
+              echo "::error file=$mod/.claude-plugin/plugin.json::$mod changed but its version is still $old"
+              status=1
+            fi
+          done
+          exit $status

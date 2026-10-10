@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tested_on-Claude_Code_2.1.288-a8a6ff?style=flat-square" alt="Tested on Claude Code 2.1.288">
+  <img src="https://img.shields.io/badge/tested_on-Claude_Code_2.1.296-a8a6ff?style=flat-square" alt="Tested on Claude Code 2.1.296">
   <img src="https://img.shields.io/badge/license-MIT-3a3a46?style=flat-square" alt="MIT license">
 </p>
 
@@ -166,11 +166,13 @@ curl -s https://raw.githubusercontent.com/arasovic/claude-code-mods/main/.claude
 
 Restart Claude Code after installing. Update later with `claude plugin marketplace update claude-code-mods` and `claude plugin update <mod>@claude-code-mods`.
 
-Tested on Claude Code 2.1.288. Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`, and ci-watch needs [`gh`](https://cli.github.com), logged in.
+Tested on the Claude Code version CI pins (`CLAUDE_CODE_VERSION` in `.github/workflows/ci.yml`). Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`, and ci-watch needs [`gh`](https://cli.github.com), logged in.
 
 ## Develop
 
-Each mod's README lists its checks. `typecheck.sh` lays the plugin API's types in `.claude-plugin/types/` when they are missing or from another Claude Code build, then runs `tsc`. Run it with no argument to check every mod.
+Each mod's README lists its checks. `typecheck.sh` takes the plugin API's types from the installed Claude Code, logged out, lays them in each mod's `.claude-plugin/types/`, then runs `tsc`. Run it with no argument to check every mod.
+
+CI runs on every pull request: `claude plugin test` and `claude plugin validate --strict` for each mod and the marketplace, `typecheck.sh`, and a check that a mod changed past its tests and docs has a new version in its `plugin.json`. It needs no secrets.
 
 ## License
 
