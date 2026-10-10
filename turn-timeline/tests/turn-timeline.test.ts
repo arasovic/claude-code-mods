@@ -113,7 +113,10 @@ test('a long target is cut before its name and duration, and long names keep a b
   expect(rows.some(r => r.startsWith('│  create_p… █'))).toBe(true)
   // Off the terminal the target is handed over whole for the surface to cut; the name and the duration never give way.
   const ui = await $.ui.mount({ plugin: 'turn-timeline', surface: 'desktop', component: 'Pane', props: PANE, requestId: 'timeline' })
-  expect((await ui.findAll({ type: 'Text' })).some(r => r.text.endsWith('--verbose --no-cache'))).toBe(true)
+  const texts = (await ui.findAll({ type: 'Text' })).map(r => r.text)
+  expect(texts.some(t => t.endsWith('--verbose --no-cache'))).toBe(true)
+  // Idle is the lanes' empty track, which a dark theme barely shows: the legend draws it as an empty square.
+  expect(texts).toContain('□')
   const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
   await ui.unmount()
   // The glance row's duration and shares, and each frame's title, never give way either.

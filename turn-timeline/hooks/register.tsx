@@ -321,7 +321,7 @@ export const register: Register = on => {
       [],
       isGrid
         ? [{ t: '█', c: 'success' }, { t: ' tool   ', d: true }, { t: '▒', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '█', c: 'error' }, { t: ' failed   ', d: true }, { t: '·', d: true }, { t: ' idle', d: true }]
-        : [{ t: '■', c: 'success' }, { t: ' tool   ', d: true }, { t: '■', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '■', c: 'error' }, { t: ' failed   ', d: true }, { t: '■', c: TRACK }, { t: ' idle', d: true }],
+        : [{ t: '■', c: 'success' }, { t: ' tool   ', d: true }, { t: '■', c: 'suggestion' }, { t: ' model   ', d: true }, { t: '■', c: 'error' }, { t: ' failed   ', d: true }, { t: '□', d: true }, { t: ' idle', d: true }],
     ]
 
     // Each share as a bar against the turn's length, model and idle named, tools by name.
