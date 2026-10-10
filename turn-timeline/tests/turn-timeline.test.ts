@@ -89,7 +89,7 @@ test('a main-loop step whose close never landed ends with the main loop', async 
   expect(await glance($, 'desktop')).toMatch(/^Last turn /)
 })
 
-test('a long target is cut before its duration, and long names keep a blank cell before their bars', async ($, on) => {
+test('a long target is cut before its name and duration, and long names keep a blank cell before their bars', async ($, on) => {
   engine(on)
   await $.turn.start({ text: 'hi', turnId: 't' })
   await $.tool.call({ tool: 'Bash', command: 'npm run build -- --filter every-package-in-this-workspace --verbose --no-cache' })
@@ -104,4 +104,11 @@ test('a long target is cut before its duration, and long names keep a blank cell
   expect(rows.some(r => r.startsWith('│  general-… '))).toBe(true)
   expect(rows.some(r => r.startsWith('│  WebSearch █'))).toBe(true)
   expect(rows.some(r => r.startsWith('│  create_p… █'))).toBe(true)
+  // Off the terminal the target is handed over whole for the surface to cut; the name and the duration never give way.
+  const ui = await $.ui.mount({ plugin: 'turn-timeline', surface: 'desktop', component: 'Pane', props: PANE, requestId: 'timeline' })
+  expect((await ui.findAll({ type: 'Text' })).some(r => r.text.endsWith('--verbose --no-cache'))).toBe(true)
+  const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
+  await ui.unmount()
+  expect(kept).toContain('Bash')
+  expect(kept).toContain('  1.5s')
 })

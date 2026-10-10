@@ -105,9 +105,9 @@ const close = async ($: EngineInterface, id: string, ok?: boolean) => {
 
 // Rows are runs of styled text. The terminal draws them on a grid of cells, so frames pad and cut them exactly.
 // Other surfaces draw text in a proportional font, where spaces line nothing up: there a row is a flex line.
-// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), and a Bar draws `parts`
-// as real bars in place of its `cells`.
-type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean }
+// `fill` stretches, `w` is a column that many characters wide (`right` aligns it), `keep` never gives way
+// when the line runs short, and a Bar draws `parts` as real bars in place of its `cells`.
+type Seg = { t: string; c?: string; d?: boolean; b?: boolean; fill?: boolean; w?: number; right?: boolean; keep?: boolean }
 type Bar = { cells: Seg[]; parts: { n: number; c?: string }[] }
 type Row = (Seg | Bar)[]
 
@@ -234,7 +234,7 @@ export const register: Register = on => {
         }
         if (s.fill) return <Box flexGrow={1} />
         const text = <Text key={String(j)} color={s.c} dimColor={s.d} bold={s.b} wrap="truncate-end">{!s.w ? s.t : s.right ? s.t.trim() : s.t.trimEnd()}</Text>
-        return s.w ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
+        return s.w || s.keep ? <Box width={s.w} flexShrink={0} justifyContent={s.right ? 'flex-end' : 'flex-start'}>{text}</Box> : text
       })
     const line = (row: Row) => (row.length ? <Box alignItems="center">{items(row)}</Box> : <Box height={0.5} />)
     const frame = (title: string, tone: string, rows: Row[], right = '') => {
@@ -347,16 +347,15 @@ export const register: Register = on => {
       return `request ${mine.indexOf(s) + 1} of ${mine.length}`
     }
     const slowRows: Row[] = slowest.length
-      ? slowest.map(s =>
-          spread(
-            [
-              { t: s.kind === 'model' ? 'model' : s.name, c: s.kind === 'model' ? 'suggestion' : s.ok === false ? 'error' : 'success', b: true },
-              { t: `  ${s.lane === 'main' ? '' : `${t.lanes.find(l => l.id === s.lane)?.label ?? ''}  `}${s.kind === 'model' ? requestOf(s) : s.detail}`, d: true },
-            ],
-            [{ t: clock((s.end ?? now) - s.start), b: true }],
-            inner,
-          ),
-        )
+      ? slowest.map(s => {
+          const left: Row = [
+            { t: s.kind === 'model' ? 'model' : s.name, c: s.kind === 'model' ? 'suggestion' : s.ok === false ? 'error' : 'success', b: true, keep: true },
+            { t: `  ${s.lane === 'main' ? '' : `${t.lanes.find(l => l.id === s.lane)?.label ?? ''}  `}${s.kind === 'model' ? requestOf(s) : s.detail}`, d: true },
+          ]
+          const took = clock((s.end ?? now) - s.start)
+          // Off the grid only the target gives way; the name and the duration stay whole.
+          return isGrid ? spread(left, [{ t: took, b: true }], inner) : [...left, { t: '', fill: true }, { t: `  ${took}`, b: true, keep: true }]
+        })
       : [[{ t: 'Nothing has finished yet.', d: true }]]
 
     return (
