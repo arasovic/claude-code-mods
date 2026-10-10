@@ -45,10 +45,11 @@ test('contextAt moves the context level, and contextAction turns the note into a
   expect(text).not.toContain('suggest /compact')
 })
 
-test('checkReset needs next for a compact and a full handoff for a clear, and clear only when allowed', () => {
+test('checkReset takes an optional next for a compact and needs a full handoff for a clear, and clear only when allowed', () => {
   const handoff = 'Goal: ship the parser. Done: tokenizer and tests. Decisions: no new dependency. Files: src/parse.ts, tests/parse.test.ts. Next: wire the parser into the CLI and run the full test suite before the commit.'
   expect(checkReset({ mode: 'compact', next: ' run the tests ' }, 'compact')).toEqual({ mode: 'compact', next: 'run the tests' })
-  expect(checkReset({ mode: 'compact' }, 'compact')).toContain('Give `next`')
+  expect(checkReset({ mode: 'compact' }, 'compact')).toEqual({ mode: 'compact' })
+  expect(checkReset({ mode: 'compact', next: '  ' }, 'compact')).toEqual({ mode: 'compact' })
   expect(checkReset({ mode: 'clear', handoff }, 'compact')).toBe('mode must be "compact".')
   expect(checkReset({ mode: 'clear', handoff: 'do the rest' }, 'compact-or-clear')).toContain('at least 200 characters')
   expect(checkReset({ mode: 'clear', handoff }, 'compact-or-clear')).toEqual({ mode: 'clear', handoff })

@@ -219,13 +219,13 @@ export const meter = (pct: number, w: number): Seg[] => {
   return out
 }
 
-export type Reset = { mode: 'compact'; next: string } | { mode: 'clear'; handoff: string }
+export type Reset = { mode: 'compact'; next?: string } | { mode: 'clear'; handoff: string }
 
 // Reads the model's context_reset call: the reset to run after the turn, or why it is refused.
 export const checkReset = (input: Record<string, unknown>, action: ContextAction): Reset | string => {
   const next = typeof input.next === 'string' ? input.next.trim() : ''
   const handoff = typeof input.handoff === 'string' ? input.handoff.trim() : ''
-  if (input.mode === 'compact') return next ? { mode: 'compact', next } : 'Give `next`: the step the work continues with after the compaction.'
+  if (input.mode === 'compact') return next ? { mode: 'compact', next } : { mode: 'compact' }
   if (input.mode !== 'clear' || action !== 'compact-or-clear') return `mode must be ${action === 'compact-or-clear' ? '"compact" or "clear"' : '"compact"'}.`
   if (handoff.length < HANDOFF_MIN)
     return `A clear needs a \`handoff\` of at least ${HANDOFF_MIN} characters: the new session sees nothing else. Give the goal, what is done, the decisions taken, the files that matter and the next step.`
@@ -238,7 +238,8 @@ const resetSpec = (action: ContextAction) => {
     name: RESET,
     description: [
       'Compacts this conversation after your turn ends, then sends `next` back to you as a new prompt, so the work goes on without the user.',
-      'Call it yourself, without asking, once session-meter has said the context is full and you reach a natural break: a step is done, nothing is half-edited, and the next step is clear. Never call it in the middle of a step.',
+      'Omit `next` when the next step is the user\'s, such as a decision or an answer: the compaction then runs and waits for the user.',
+      'Call it yourself, without asking, once session-meter has said the context is full and you reach a natural break: a step is done and nothing is half-edited. Never call it in the middle of a step.',
       ...(canClear
         ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
         : []),
@@ -248,7 +249,7 @@ const resetSpec = (action: ContextAction) => {
       type: 'object',
       properties: {
         mode: { type: 'string', enum: canClear ? ['compact', 'clear'] : ['compact'] },
-        next: { type: 'string', description: 'For compact: the step the work continues with.' },
+        next: { type: 'string', description: 'For compact: the step the work continues with. Omit it when the next step is the user\'s.' },
         ...(canClear ? { handoff: { type: 'string', description: 'For clear: everything the new session needs, in full.' } } : {}),
       },
       required: ['mode'],
@@ -363,13 +364,14 @@ export const register: Register = (on, options) => {
     let saved: string | undefined
     try {
       if (job.mode === 'compact') {
-        $.ui.toast('session-meter: compacting, then continuing')
-        const done = await $.session.compact({ instructions: `The work continues with: ${job.next}` })
+        $.ui.toast(job.next ? 'session-meter: compacting, then continuing' : 'session-meter: compacting')
+        const done = await $.session.compact(job.next ? { instructions: `The work continues with: ${job.next}` } : undefined)
         if (done.skip !== undefined) {
           $.ui.toast(`session-meter: compaction skipped: ${done.skip}`)
           return result
         }
-        await $.prompt.submit({ text: `session-meter compacted the conversation. Continue: ${job.next}` })
+        if (job.next) await $.prompt.submit({ text: `session-meter compacted the conversation. Continue: ${job.next}` })
+        else $.ui.toast('session-meter: compacted; waiting for you')
       } else {
         saved = await saveHandoff($, job.handoff)
         $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)

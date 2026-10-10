@@ -30,7 +30,7 @@ By default the model only suggests a reset and you decide. Two options in `/conf
 | Option | Values | What it does |
 | --- | --- | --- |
 | `contextAction` | `suggest` (default) | The model suggests `/compact` or a fresh session. |
-| | `compact` | The model gets a `context_reset` tool. At a natural break it calls the tool. When the turn ends, the mod compacts the conversation and sends the model its next step, so the work goes on. |
+| | `compact` | The model gets a `context_reset` tool. At a natural break it calls the tool. When the turn ends, the mod compacts the conversation and sends the model its next step, so the work goes on. When the next step is yours, such as a decision, the model gives no next step and the mod compacts, then waits for you. |
 | | `compact-or-clear` | As `compact`. The model can also choose a clear when the next work does not build on the conversation. A clear needs a handoff of at least 200 characters. The mod saves the handoff to `~/.claude/handoffs/`, runs `/clear`, then sends the handoff as the first message of the new session. |
 | `contextAt` | 10 to 95, default 60 | The context percentage that sends the note. |
 
@@ -42,7 +42,7 @@ How this differs from Claude Code's own auto-compact:
 | --- | --- | --- |
 | Who decides | A fixed threshold near the window limit | The model, at a natural break after `contextAt` |
 | When it runs | Whenever the threshold is crossed, even mid-task | When the turn that called the tool ends |
-| What carries over | The engine's summary | The summary, steered by the model's `next` step, which is also sent as the next prompt |
+| What carries over | The engine's summary | The summary, steered by the model's `next` step, which is also sent as the next prompt; with no `next`, the mod waits for you |
 | A fresh start | No | With `compact-or-clear`, a `/clear` that needs a written handoff |
 
 Auto-compact stays on. The mod only resets earlier, at a moment the model chooses.
