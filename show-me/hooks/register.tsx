@@ -180,14 +180,19 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" paddingTop={1}>
+        {/* On a narrow pane only the title gives way; the counters and the keys stay whole on one line. */}
         <Box flexDirection="row" gap={1}>
-          <Text bold>{`${i + 1}/${list.length}`}</Text>
-          <Text dimColor>{`turn ${turns.indexOf(d.turnId) + 1}/${turns.length}`}</Text>
-          <Text>{d.title}</Text>
-          <Button key="prev" plain hotkey="p" label="‹" onPress={step(-1)} />
-          <Button key="next" plain hotkey="n" label="›" onPress={step(1)} />
-          {d.png && <Button key="open" plain hotkey="o" label="open" onPress={() => void $.process.run(['open', d.png!])} />}
-          {close}
+          <Box flexShrink={0} gap={1}>
+            <Text bold>{`${i + 1}/${list.length}`}</Text>
+            <Text dimColor>{`turn ${turns.indexOf(d.turnId) + 1}/${turns.length}`}</Text>
+          </Box>
+          <Text wrap="truncate-end">{d.title}</Text>
+          <Box flexShrink={0} gap={1}>
+            <Button key="prev" plain hotkey="p" label="‹" onPress={step(-1)} />
+            <Button key="next" plain hotkey="n" label="›" onPress={step(1)} />
+            {d.png && <Button key="open" plain hotkey="o" label="open" onPress={() => void $.process.run(['open', d.png!])} />}
+            {close}
+          </Box>
         </Box>
         {hint}
         {body}

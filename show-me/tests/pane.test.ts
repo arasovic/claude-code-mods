@@ -78,6 +78,16 @@ for (const surface of ['terminal', 'desktop'] as const) {
       expect(await ui.find({ type: 'Markdown' })).toBeUndefined()
     })
 
+  test(`${surface}: a long title gives way to the counters and the keys`, async ($, on) => {
+    const title = 'flowchart LR with a title long enough to run past a narrow pane'
+    engine(on, [{ turnId: 't1', title, source: 'flowchart LR\n  a --> b', error: 'boom' }])
+    const ui = await mount($)
+    expect((await ui.find({ type: 'Text', text: title }))?.props.wrap).toBe('truncate-end')
+    const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
+    expect(kept).toContain('1/1turn 1/1')
+    expect(kept.some(t => t.includes('close'))).toBe(true)
+  })
+
   test(`${surface}: x closes the pane`, async ($, on) => {
     const closed = engine(on, HISTORY)
     const ui = await mount($)
