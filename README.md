@@ -172,7 +172,7 @@ Tested on the Claude Code version CI pins (`CLAUDE_CODE_VERSION` in `.github/wor
 
 Each mod's README lists its checks. `typecheck.sh` takes the plugin API's types from the installed Claude Code, logged out, lays them in each mod's `.claude-plugin/types/`, then runs `tsc`. Run it with no argument to check every mod.
 
-CI runs on every pull request: `claude plugin test` and `claude plugin validate --strict` for each mod and the marketplace, `typecheck.sh`, and a check that a mod changed past its tests and docs has a new version in its `plugin.json`. It needs no secrets.
+CI runs on every pull request: `claude plugin test` and `claude plugin validate --strict` for each mod and the marketplace, `typecheck.sh`, a check that a mod changed past its tests and docs has a new version in its `plugin.json`, and a check that no commit message carries a `Co-Authored-By` or tool attribution line. It needs no secrets.
 
 ## License
 
