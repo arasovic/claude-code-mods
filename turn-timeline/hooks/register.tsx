@@ -145,7 +145,15 @@ const fit = (row: Row, w: number): Seg[] => {
   return out
 }
 
-const spread = (left: Row, right: Row, w: number): Row => [...left, { t: ' '.repeat(Math.max(1, w - width(left) - width(right))), fill: true }, ...right]
+// The left half is cut first, so a long target never pushes the right half (a duration) off the edge.
+const spread = (left: Row, right: Row, w: number): Row => {
+  const room = Math.max(0, w - width(right) - 1)
+  const kept = width(left) > room ? fit(left, room) : left
+  return [...kept, { t: ' '.repeat(Math.max(1, w - width(kept) - width(right))), fill: true }, ...right]
+}
+
+// A name column that keeps a blank cell before what follows: "general-purpose" reads "general-…".
+const column = (text: string, w: number) => (text.length < w ? text.padEnd(w) : `${text.slice(0, w - 2)}… `)
 
 const CELL: Record<ReturnType<typeof laneCells>[number], Seg> = {
   tool: { t: '█', c: 'success' },
@@ -174,7 +182,8 @@ export const register: Register = on => {
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) {
       const at = await $.clock.now()
-      await update($, turn, t => (t ? { ...t, end: at } : t))
+      // Nothing of the main loop's own runs past its end: a step whose close never landed ends here.
+      await update($, turn, t => (t ? { ...t, end: at, spans: t.spans.map(s => (s.lane === 'main' && s.end === undefined ? { ...s, end: at } : s)) } : t))
     }
     return next(e)
   })
@@ -263,7 +272,8 @@ export const register: Register = on => {
     }
 
     // A background subagent outlives the main turn, so the timeline runs until its last step ends too.
-    const end = !t.end || t.spans.some(s => s.end === undefined) ? now : Math.max(t.end, ...t.spans.map(s => s.end ?? 0))
+    const running = t.end === undefined || t.spans.some(s => s.end === undefined)
+    const end = running ? now : Math.max(t.end ?? now, ...t.spans.map(s => s.end ?? 0))
     const duration = end - t.start
     const cols = inner - LABEL_W
     const main = t.spans.filter(s => s.lane === 'main')
@@ -272,7 +282,7 @@ export const register: Register = on => {
     const toolPct = Math.max(0, 100 - pct('model') - pct('idle'))
 
     const glance: Row = [
-      { t: t.end && end !== now ? 'Last turn ' : 'Running ', d: true },
+      { t: running ? 'Running ' : 'Last turn ', d: true },
       { t: clock(duration), b: true },
       { t: '   model ', d: true },
       { t: `${pct('model')}%`, c: 'suggestion', b: true },
@@ -293,7 +303,7 @@ export const register: Register = on => {
         cols,
         now,
       ).map(k => CELL[k])
-      const row: Row = [{ t: lane.label.padEnd(LABEL_W).slice(0, LABEL_W), b: lane.id === 'main', d: lane.id !== 'main', w: LABEL_W }, { cells, parts: runs(cells) }]
+      const row: Row = [{ t: column(lane.label, LABEL_W), b: lane.id === 'main', d: lane.id !== 'main', w: LABEL_W }, { cells, parts: runs(cells) }]
       return i ? [[], row] : [row]
     })
     const hidden = t.lanes.length - lanes.length
@@ -308,12 +318,12 @@ export const register: Register = on => {
     ]
 
     // Each share as a bar against the turn's length, model and idle named, tools by name.
-    const barW = inner - 24
+    const barW = inner - 25
     const shareRows: Row[] = parts.slice(0, 6).map(p => {
       const filled = Math.round((p.pct / 100) * barW)
       const tone = p.name === 'model' ? 'suggestion' : p.name === 'idle' ? undefined : 'success'
       const left: Row = [
-        { t: p.name.padEnd(9).slice(0, 9), d: p.name === 'idle', w: 9 },
+        { t: column(p.name, LABEL_W), d: p.name === 'idle', w: LABEL_W },
         {
           cells: [{ t: '█'.repeat(filled), c: tone, d: p.name === 'idle' }, { t: '·'.repeat(Math.max(0, barW - filled)), d: true }],
           parts: [{ n: filled, c: tone ?? 'promptBorder' }, { n: Math.max(0, barW - filled) }],

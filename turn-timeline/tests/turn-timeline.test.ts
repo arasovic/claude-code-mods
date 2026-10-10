@@ -1,4 +1,6 @@
-import { expect, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
+import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { axis, breakdown, clock, laneCells, target } from '../hooks/register'
 
@@ -28,4 +30,77 @@ test('axis labels are round and fit the width', () => {
   expect(clock(1_234)).toBe('1.2s')
   expect(clock(90_000)).toBe('1m30s')
   expect(target({ command: 'npm  test' })).toBe('npm test')
+})
+
+const PANE = { title: 'Timeline', isFocused: false, bodyColumns: 64, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
+
+// Beneath the plugin the test stands for the engine: a clock it moves by hand, tools that take 1.5s,
+// and one general-purpose subagent. `loseClose` drops the write that would close the next tool's span,
+// as when the mod's hooks worker ends mid-call.
+const engine = (on: On) => {
+  const clock = mock.clock(on, { now: 1_000 })
+  const flags = { loseClose: false, dropWrite: false }
+  on('state.set', (_$, e, next) => {
+    if (!flags.dropWrite) return next(e)
+    flags.dropWrite = false
+    return { value: { isSet: true as const, version: (e.ifVersion ?? 0) + 1 } }
+  })
+  on('agent.list', () => ({ value: [{ id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const }] }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  on('tool.call', async () => {
+    await clock.advance(1_500)
+    flags.dropWrite = flags.loseClose
+    return { result: { stdout: '', stderr: '', interrupted: false } } as never
+  })
+  return { clock, flags }
+}
+const complete = ($: Engine) => $.turn.complete({ answer: 'ok', durationMs: 0, isAborted: false, reason: 'answer', turnId: 't' })
+const draw = async ($: Engine, surface: 'terminal' | 'desktop') => {
+  const ui = await $.ui.mount({ plugin: 'turn-timeline', surface, component: 'Pane', props: PANE, requestId: 'timeline' })
+  const texts = (await ui.findAll({ type: 'Text' })).map(r => r.text)
+  await ui.unmount()
+  return texts
+}
+// The glance row's state, as each surface draws it: whole on the terminal, its first part elsewhere.
+const glance = async ($: Engine, surface: 'terminal' | 'desktop') => (await draw($, surface)).find(r => /^(Running|Last turn) /.test(r)) ?? ''
+
+test('a turn that has just ended reads as over, not as running', async ($, on) => {
+  engine(on)
+  await $.turn.start({ text: 'hi', turnId: 't' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  await complete($)
+  // No time has passed since the turn ended.
+  expect(await glance($, 'terminal')).toMatch(/^Last turn 1\.5s /)
+  expect(await glance($, 'desktop')).toMatch(/^Last turn /)
+})
+
+test('a main-loop step whose close never landed ends with the main loop', async ($, on) => {
+  const { clock, flags } = engine(on)
+  await $.turn.start({ text: 'hi', turnId: 't' })
+  flags.loseClose = true
+  await $.tool.call({ tool: 'Bash', command: 'npm test' })
+  flags.loseClose = false
+  await clock.advance(2_000)
+  await complete($)
+  // Five seconds on, the turn still reads as over and its clock has stopped at its end.
+  await clock.advance(5_000)
+  expect(await glance($, 'terminal')).toMatch(/^Last turn 3\.5s /)
+  expect(await glance($, 'desktop')).toMatch(/^Last turn /)
+})
+
+test('a long target is cut before its duration, and long names keep a blank cell before their bars', async ($, on) => {
+  engine(on)
+  await $.turn.start({ text: 'hi', turnId: 't' })
+  await $.tool.call({ tool: 'Bash', command: 'npm run build -- --filter every-package-in-this-workspace --verbose --no-cache' })
+  await $.tool.call({ tool: 'WebSearch', query: 'claude code mods' })
+  await $.tool.call({ tool: 'mcp__github__create_pull_request', title: 'fix' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  await complete($)
+  const rows = (await draw($, 'terminal')).filter(r => /^[╭│╰].*[╮│╯]$/.test(r))
+  for (const r of rows) expect(r.length).toBe(PANE.bodyColumns - 1)
+  expect(rows.find(r => r.includes('every-package'))).toMatch(/… 1\.5s  │$/)
+  expect(rows.some(r => r.startsWith('│  general-… '))).toBe(true)
+  expect(rows.some(r => r.startsWith('│  WebSearch █'))).toBe(true)
+  expect(rows.some(r => r.startsWith('│  create_p… █'))).toBe(true)
 })
