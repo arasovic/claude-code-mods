@@ -242,14 +242,24 @@ export const register: Register = (on, options) => {
     if (e.props.hasSurvey || (!items.length && !list.length)) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
+    const isTerminal = e.surface === 'terminal'
     const rows = items.flatMap(w => {
       if (w.result) return [<Text key={w.id} color={w.isFailed ? 'red' : w.result.startsWith('✓') ? 'green' : undefined}>{w.result}</Text>]
       if (!w.runs.length) return [<Text key={w.id} dimColor>{`⟳ ${w.label} · waiting for workflows…`}</Text>]
-      return w.runs.map((r, i) => (
-        <Text key={`${w.id}:${i}`}>
-          {`⟳ ${w.label} · ${r.name} ${bar(r.elapsedMs, r.expectedMs)} ${duration(r.elapsedMs)}${r.expectedMs ? ` / ~${duration(r.expectedMs)}` : ''}`}
-        </Text>
-      ))
+      return w.runs.map((r, i) => {
+        const name = `⟳ ${w.label} · ${r.name}`
+        const progress = ` ${bar(r.elapsedMs, r.expectedMs)} ${duration(r.elapsedMs)}${r.expectedMs ? ` / ~${duration(r.expectedMs)}` : ''}`
+        if (isTerminal) return <Text key={`${w.id}:${i}`}>{name + progress}</Text>
+        // Off the terminal a narrow row cuts the name and keeps the bar and its time on the same line.
+        return (
+          <Box key={`${w.id}:${i}`}>
+            <Text wrap="truncate-end">{name}</Text>
+            <Box flexShrink={0}>
+              <Text>{progress}</Text>
+            </Box>
+          </Box>
+        )
+      })
     })
     for (const b of list) {
       rows.push(<Text key={b.url} color="red">{`✗ scheduled "${b.workflow}" failed (${b.at}) ${b.url}`}</Text>)
