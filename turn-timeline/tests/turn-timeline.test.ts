@@ -35,7 +35,7 @@ test('axis labels are round and fit the width', () => {
 const PANE = { title: 'Timeline', isFocused: false, bodyColumns: 64, placement: 'dock', scroll: { offset: 0, bodyRows: 40 }, view: {} } as const
 
 // Beneath the plugin the test stands for the engine: a clock it moves by hand, tools that take 1.5s,
-// and one general-purpose subagent. `loseClose` drops the write that would close the next tool's span,
+// and two general-purpose subagents. `loseClose` drops the write that would close the next tool's span,
 // as when the mod's hooks worker ends mid-call.
 const engine = (on: On) => {
   const clock = mock.clock(on, { now: 1_000 })
@@ -45,7 +45,12 @@ const engine = (on: On) => {
     flags.dropWrite = false
     return { value: { isSet: true as const, version: (e.ifVersion ?? 0) + 1 } }
   })
-  on('agent.list', () => ({ value: [{ id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const }] }))
+  on('agent.list', () => ({
+    value: [
+      { id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const },
+      { id: 'a2', type: 'general-purpose', description: 'look elsewhere', status: 'running' as const },
+    ],
+  }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', async () => {
@@ -89,7 +94,7 @@ test('a main-loop step whose close never landed ends with the main loop', async 
   expect(await glance($, 'desktop')).toMatch(/^Last turn /)
 })
 
-test('a long target is cut before its name and duration, and long names keep a blank cell before their bars', async ($, on) => {
+test('a long target is cut before its name and duration, and long names keep a blank cell and their number before their bars', async ($, on) => {
   engine(on)
   await $.turn.start({ text: 'hi', turnId: 't' })
   await $.tool.call({ tool: 'Bash', command: 'npm run build -- --filter every-package-in-this-workspace --verbose --no-cache' })
@@ -97,11 +102,13 @@ test('a long target is cut before its name and duration, and long names keep a b
   await $.tool.call({ tool: 'WebSearch', query: 'claude code mods' } as never)
   await $.tool.call({ tool: 'mcp__github__create_pull_request', title: 'fix' } as never)
   await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'a1' } as never)
+  await $.tool.call({ tool: 'Bash', command: 'pwd', agentId: 'a2' } as never)
   await complete($)
   const rows = (await draw($, 'terminal')).filter(r => /^[╭│╰].*[╮│╯]$/.test(r))
   for (const r of rows) expect(r.length).toBe(PANE.bodyColumns - 1)
   expect(rows.find(r => r.includes('every-package'))).toMatch(/… 1\.5s  │$/)
   expect(rows.some(r => r.startsWith('│  general-… '))).toBe(true)
+  expect(rows.some(r => r.startsWith('│  genera… 2 '))).toBe(true)
   expect(rows.some(r => r.startsWith('│  WebSearch █'))).toBe(true)
   expect(rows.some(r => r.startsWith('│  create_p… █'))).toBe(true)
   // Off the terminal the target is handed over whole for the surface to cut; the name and the duration never give way.
@@ -109,6 +116,9 @@ test('a long target is cut before its name and duration, and long names keep a b
   expect((await ui.findAll({ type: 'Text' })).some(r => r.text.endsWith('--verbose --no-cache'))).toBe(true)
   const kept = (await ui.findAll({ type: 'Box' })).filter(b => b.props.flexShrink === 0).map(b => b.text)
   await ui.unmount()
+  // The glance row's duration and shares, and each frame's title, never give way either.
+  expect(kept.slice(0, 4)).toEqual(['7.5s', '0%', '60%', '40%'])
+  for (const title of ['Timeline', 'Where time went', 'Slowest']) expect(kept).toContain(title)
   expect(kept).toContain('Bash')
   expect(kept).toContain('  1.5s')
 })

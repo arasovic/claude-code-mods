@@ -152,8 +152,13 @@ const spread = (left: Row, right: Row, w: number): Row => {
   return [...kept, { t: ' '.repeat(Math.max(1, w - width(kept) - width(right))), fill: true }, ...right]
 }
 
-// A name column that keeps a blank cell before what follows: "general-purpose" reads "general-…".
-const column = (text: string, w: number) => (text.length < w ? text.padEnd(w) : `${text.slice(0, w - 2)}… `)
+// A name column that keeps a blank cell before what follows: "general-purpose" reads "general-…",
+// and a numbered lane keeps its number: "general-purpose 2" reads "genera… 2".
+const column = (text: string, w: number) => {
+  if (text.length < w) return text.padEnd(w)
+  const n = / \d+$/.exec(text)?.[0] ?? ''
+  return `${text.slice(0, w - 2 - n.length)}…${n} `
+}
 
 const CELL: Record<ReturnType<typeof laneCells>[number], Seg> = {
   tool: { t: '█', c: 'success' },
@@ -242,9 +247,11 @@ export const register: Register = on => {
         return (
           <Box flexDirection="column" marginTop={2} borderStyle="round" borderColor={tone} borderDimColor>
             <Box marginBottom={1}>
-              <Text color={tone} bold>{title}</Text>
+              <Box flexShrink={0}>
+                <Text color={tone} bold>{title}</Text>
+              </Box>
               <Box flexGrow={1} />
-              {right ? <Text dimColor>{right}</Text> : null}
+              {right ? <Text dimColor wrap="truncate-end">{right}</Text> : null}
             </Box>
             {rows.map(line)}
           </Box>
@@ -283,13 +290,13 @@ export const register: Register = on => {
 
     const glance: Row = [
       { t: running ? 'Running ' : 'Last turn ', d: true },
-      { t: clock(duration), b: true },
+      { t: clock(duration), b: true, keep: true },
       { t: '   model ', d: true },
-      { t: `${pct('model')}%`, c: 'suggestion', b: true },
+      { t: `${pct('model')}%`, c: 'suggestion', b: true, keep: true },
       { t: '   tools ', d: true },
-      { t: `${toolPct}%`, c: 'success', b: true },
+      { t: `${toolPct}%`, c: 'success', b: true, keep: true },
       { t: '   idle ', d: true },
-      { t: `${pct('idle')}%`, b: true },
+      { t: `${pct('idle')}%`, b: true, keep: true },
     ]
 
     // One row per loop, the busiest first after main; lanes past the room left fold into a count.
