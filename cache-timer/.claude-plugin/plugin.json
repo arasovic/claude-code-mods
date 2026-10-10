@@ -1,6 +1,6 @@
 {
   "name": "cache-timer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Counts down to when the prompt cache expires, so you can send the next message before the whole conversation has to be cached again",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
