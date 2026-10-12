@@ -29,6 +29,29 @@ test('env lines and quoted literals hide only the value', () => {
   expect(scrub(`{"client_secret": "abcdefghijklmnop"}`).text).toBe(`{"client_secret": "${tag('secret-value')}"}`)
 })
 
+test('names ending in AUTH or PASS hide their value', () => {
+  expect(scrub('export REDISCLI_AUTH=' + 'q7'.repeat(16)).text).toBe('export REDISCLI_AUTH=' + tag('secret-value'))
+  expect(scrub('DB_PASS=' + 'q7'.repeat(8)).text).toBe('DB_PASS=' + tag('secret-value'))
+  for (const text of [
+    'AUTHOR_NAME=SomeoneWithALongName',
+    'PASSPORT_COUNTRY=NetherlandsAntilles',
+    'CACHE_BYPASS=always_for_admin_users',
+    'GOOGLE_OAUTH=enabled_for_all_users',
+  ]) expect(scrub(text).text).toBe(text)
+})
+
+test('connection URLs hide only the password', () => {
+  expect(scrub('REDIS_URL=redis://:' + 'q7'.repeat(16) + '@app-redis:6379').text).toBe('REDIS_URL=redis://:' + tag('secret-value') + '@app-redis:6379')
+  expect(scrub('postgres://app:' + 'q7'.repeat(6) + '@db:5432/x').text).toBe('postgres://app:' + tag('secret-value') + '@db:5432/x')
+  expect(scrub('redis://:' + 'ab@cd' + 'q7'.repeat(6) + '@host').text).toBe('redis://:' + tag('secret-value') + '@host')
+  expect(scrub('redis://:' + 'ab%2Fcd%40' + 'q7'.repeat(6) + '@host').text).toBe('redis://:' + tag('secret-value') + '@host')
+  for (const text of [
+    'REDIS_URL=redis://:${REDIS_PASSWORD}@app-redis:6379',
+    'redis://localhost:6379',
+    'https://example.com:8443/path@v2',
+  ]) expect(scrub(text).text).toBe(text)
+})
+
 test('ordinary text and code stay as they are', () => {
   for (const text of [
     'const token = getTokenFromHeaderValue(request)',

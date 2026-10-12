@@ -18,9 +18,12 @@ const SECRET_RULES: readonly [string, RegExp][] = [
 // Only the value is hidden; the name stays so the model knows the key exists.
 const ASSIGNMENTS = [
   // .env style: UPPER_CASE name, unquoted or quoted value, not a $reference or <placeholder>
-  /^(?<head>\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)[A-Z0-9_]*\s*=\s*["']?)(?<value>[^\s"'#$<]{12,})/gm,
+  // AUTH and PASS count only as the last whole word (REDISCLI_AUTH, DB_PASS), so AUTHOR, BYPASS and GOOGLE_OAUTH stay.
+  /^(?<head>\s*(?:export\s+)?(?:[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)[A-Z0-9_]*|(?:[A-Z0-9_]*_)?(?:AUTH|PASS))\s*=\s*["']?)(?<value>[^\s"'#$<]{12,})/gm,
   // code, JSON, YAML: a quoted literal assigned to a secret-shaped name
   /(?<head>["']?\b[\w.-]*(?:secret|token|password|passwd|api_?key|access_?key|private_?key)["']?\s*[:=]\s*(["']))(?<value>[^"'\s$<{]{12,})(?=\2)/gi,
+  // the password in a connection URL: redis://:pass@host, postgres://user:pass@host; it runs to the last @
+  /(?<head>\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)(?<value>[^\s/$<{[][^\s/]{7,})(?=@)/gi,
 ]
 
 const tag = (rule: string) => `[secret-guard: ${rule}]`
