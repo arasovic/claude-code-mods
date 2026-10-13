@@ -105,5 +105,10 @@ export const register: Register = on => {
 
   // After /clear, /resume or a compaction the next request writes a new prefix whatever the clock says.
   on('session.end', async ($, e, next) => (await forget($), next(e)))
-  on('session.compact', async ($, e, next) => (await forget($), next(e)))
+  // A subagent's compaction leaves the main thread's prefix alone; a skipped one or a precompute changes nothing.
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    if (e.agentId === undefined && e.trigger !== 'precompute' && result.skip === undefined) await forget($)
+    return result
+  })
 }
