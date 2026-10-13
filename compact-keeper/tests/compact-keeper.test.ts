@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 
 import { fileName, handoff, summaryOf } from '../hooks/register'
 
@@ -19,4 +19,27 @@ test('file name and handoff layout', () => {
   expect(text).toContain('`claude --resume abc`')
   expect(text).toContain('- /a/b.ts')
   expect(text.endsWith('## Summary\n\nDid things.\n')).toBe(true)
+})
+
+test('only a main-thread compaction that ran writes a handoff', async ($, on) => {
+  mock.env(on, { HOME: '/home/a' })
+  // The hook reads the clock first, so a guard that fails shows here even when a later throw stops the write.
+  let clockReads = 0
+  on('clock.now', () => (clockReads++, { value: 0 }))
+  const writes: string[] = []
+  on('fs.write', (_$, e) => (writes.push(e.path), { value: undefined }))
+  on('session.cwd', () => ({ value: '/x' }))
+  on('session.id', () => ({ value: 'abcdef12' }))
+  on('ui.toast', () => ({ value: undefined }))
+  on('session.compact', (_$, e) => (e.instructions === 'skip' ? { skip: 'vetoed' } : { messages: [msg('summary')] }))
+  const messages = [msg('old', 'h1')]
+
+  await $.session.compact({ trigger: 'auto', instructions: 'skip', messages })
+  await $.session.compact({ trigger: 'precompute', messages })
+  await $.session.compact({ trigger: 'auto', agentId: 'sub', messages })
+  expect(clockReads).toBe(0)
+  expect(writes).toEqual([])
+
+  await $.session.compact({ trigger: 'auto', messages })
+  expect(writes).toHaveLength(1)
 })
