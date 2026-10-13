@@ -82,3 +82,23 @@ test('a subscription stored by an earlier session gives the first reply an hour'
   await clock.advance(1000)
   expect(await band()).toBe('🟢 cache 4:58')
 })
+
+test('only a main-thread compaction that ran clears the band', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+  mock.store(on)
+  const messages = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
+  on('session.compact', (_$, e) => (e.instructions === 'skip' ? { skip: 'vetoed' } : { messages }))
+  const band = await reply($, on)
+
+  await clock.advance(1000)
+  await $.session.compact({ trigger: 'auto', agentId: 'sub', messages })
+  await $.session.compact({ trigger: 'auto', instructions: 'skip', messages })
+  await $.session.compact({ trigger: 'precompute', messages })
+  await clock.advance(1000)
+  expect(await band()).toBe('🟢 cache 4:58')
+
+  await $.session.compact({ trigger: 'auto', messages })
+  await clock.advance(1000)
+  expect(await band()).toBeUndefined()
+})
