@@ -1,6 +1,6 @@
 {
   "name": "session-meter",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Shows a live session pane (/ctx): context breakdown, usage limits with pace, tool calls and model requests; sends the model a one-time note when limits or context cross a threshold, and can let the model compact or clear on its own",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
@@ -10,7 +10,7 @@
     "autoOpen": {
       "type": "boolean",
       "title": "Open the pane at start",
-      "description": "Open the session pane on its own when a session starts. Turn off to keep the screen clear; /ctx still opens it, and the notes to the model still go out.",
+      "description": "Open the session pane on its own when a terminal session starts (never in the desktop app, which shows context in its own sidebar). Turn off to keep the screen clear; /ctx still opens it, and the notes to the model still go out.",
       "required": false,
       "default": true
     },

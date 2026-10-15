@@ -54,7 +54,7 @@ claude plugin marketplace add arasovic/claude-code-mods
 claude plugin install session-meter@claude-code-mods
 ```
 
-Restart Claude Code. The pane opens on its own in a terminal 144 columns or wider; otherwise type `/ctx`. It docks beside the transcript in fullscreen mode, from 110 columns.
+Restart Claude Code. The pane opens on its own in a terminal 144 columns or wider; otherwise type `/ctx`. In the desktop app it does not open on its own, since the app shows context in its own sidebar; `/ctx` opens it there too. It docks beside the transcript in fullscreen mode, from 110 columns.
 
 To keep the screen clear, turn off **Open the pane at start** in `/config` (the `autoOpen` option). `/ctx` still opens the pane, and the notes to the model still go out.
 

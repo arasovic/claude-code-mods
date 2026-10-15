@@ -239,3 +239,15 @@ test('off the terminal only names, targets and labels give way; numbers and titl
   expect(texts).toContain('measuring pace…')
   expect(texts.some(t => t.startsWith('   measuring'))).toBe(false)
 })
+
+test('the pane opens on its own only in a terminal session', async ($, on) => {
+  resetSession(on)
+  const opened: string[] = []
+  on('ui.open', (_$, e) => (opened.push(e.id), { value: { isPlaced: true } }))
+
+  await $.session.start({ cwd: '/repo', surface: 'desktop', isInteractive: true })
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  expect(opened).toEqual([])
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(opened).toEqual(['ctx'])
+})
