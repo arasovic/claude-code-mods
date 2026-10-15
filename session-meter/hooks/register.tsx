@@ -316,7 +316,8 @@ export const register: Register = (on, options) => {
     if (live !== 'suggest') await $.tool.register(resetSpec(live))
     await refresh($)
     await sample($, (await read($, reading)).limits)
-    if (options.autoOpen !== false) void $.ui.open({ id: PANE, title: 'Session' })
+    // Only the terminal REPL: the desktop app runs without one and shows context in its own sidebar.
+    if (options.autoOpen !== false && e.surface === 'terminal') void $.ui.open({ id: PANE, title: 'Session' })
     return next(e)
   })
 
