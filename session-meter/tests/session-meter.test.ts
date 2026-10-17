@@ -158,6 +158,7 @@ const resetSession = (on: On) => {
   mock.clock(on)
   memoryState(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const tools: string[] = []
   on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
@@ -169,7 +170,9 @@ const resetSession = (on: On) => {
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   const toasts: string[] = []
   on('ui.toast', (_$, e) => (toasts.push(e.text), { value: undefined }))
-  return { tools, compacts, submits, toasts }
+  const runs: string[] = []
+  on('command.run', (_$, e) => (runs.push(`/${e.command} ${e.args}`.trim()), { text: '' }))
+  return { tools, compacts, submits, toasts, runs }
 }
 
 test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
@@ -202,6 +205,21 @@ test('a headless session gets no context_reset tool and the suggest note', { opt
   expect(text).toContain('context window is 80% full')
   expect(text).toContain('suggest /compact')
   expect(text).not.toContain('context_reset')
+})
+
+test('a headless session the desktop attaches to gets the tool and compacts through a queued /compact', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { tools, compacts, submits, runs } = resetSession(on)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:2' })
+  expect(tools).toEqual(['context_reset'])
+
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
+  await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  expect(compacts).toEqual([])
+  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
 })
 
 const PANE = { title: 'Context', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
