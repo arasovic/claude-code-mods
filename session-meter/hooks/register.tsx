@@ -307,17 +307,31 @@ export const register: Register = (on, options) => {
   const thresholds = levels(contextAt)
   // ponytail: held in the module, so a hot reload between the call and the turn's end drops the reset.
   let pending: Reset | undefined
-  // A headless run (-p, SDK) cannot compact from a hook and ends with the turn, so the tool would only stop the work.
+  // A plain -p run ends with the turn, so the tool would only stop the work. The desktop app is headless too,
+  // but it stays open and attaches as a surface, which a -p run never does.
   let live: ContextAction = 'suggest'
+  // Only the REPL can compact from a hook; a headless host compacts through a queued /compact.
+  let isRepl = false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
-    live = e.isInteractive ? action : 'suggest'
-    if (live !== 'suggest') await $.tool.register(resetSpec(live))
+    isRepl = e.isInteractive
+    if (isRepl && live !== action) {
+      live = action
+      await $.tool.register(resetSpec(live))
+    }
     await refresh($)
     await sample($, (await read($, reading)).limits)
     // Only the terminal REPL: the desktop app runs without one and shows context in its own sidebar.
     if (options.autoOpen !== false && e.surface === 'terminal') void $.ui.open({ id: PANE, title: 'Session' })
+    return next(e)
+  })
+
+  on('session.attach', async ($, e, next) => {
+    if (e.surface !== 'terminal' && live !== action) {
+      live = action
+      await $.tool.register(resetSpec(live))
+    }
     return next(e)
   })
 
@@ -370,9 +384,13 @@ export const register: Register = (on, options) => {
     try {
       if (job.mode === 'compact') {
         $.ui.toast(job.next ? 'session-meter: compacting, then continuing' : 'session-meter: compacting')
-        const done = await $.session.compact(job.next ? { instructions: `The work continues with: ${job.next}` } : undefined)
-        if (done.skip !== undefined) {
-          $.ui.toast(`session-meter: compaction skipped: ${done.skip}`)
+        const instructions = job.next ? `The work continues with: ${job.next}` : undefined
+        // A queued /compact reports no veto, so only the REPL's direct call can come back skipped.
+        let skip: string | undefined
+        if (isRepl) skip = (await $.session.compact(instructions === undefined ? undefined : { instructions })).skip
+        else await $.command.run({ command: 'compact', args: instructions ?? '' })
+        if (skip !== undefined) {
+          $.ui.toast(`session-meter: compaction skipped: ${skip}`)
           return result
         }
         if (job.next) await $.prompt.submit({ text: `session-meter compacted the conversation. Continue: ${job.next}` })
