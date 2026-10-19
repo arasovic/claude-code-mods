@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { commandSegments, pathWords, withoutDataHeredocs } from './shell-read'
+import { commandSegments, pathWords, withoutDataHeredocs, withoutJqFilter } from './shell-read'
 
 // Derived from gitleaks' default rules, loosened where key formats change.
 const SECRET_RULES: readonly [string, RegExp][] = [
@@ -120,7 +120,7 @@ export const secretCommand = (command: string, home: string): string | undefined
   if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(runnable)) return 'printing the whole environment prints secrets'
   for (const seg of commandSegments(runnable)) {
     if (SECRET_COMMANDS.some(r => r.test(seg))) return `\`${seg.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
-    const words = pathWords(seg)
+    const words = pathWords(withoutJqFilter(seg))
     const cmd = words[0] ?? ''
     if (NON_READING.has(cmd)) continue
     // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
