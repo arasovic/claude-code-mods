@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionContextBreakdown } from 'claude-code'
 
-import type { MeterBreakdown, MeterItem, MeterNote, MeterReading, MeterRequest, MeterSample, MeterTool } from '../types'
+import type { MeterBreakdown, MeterItem, MeterNote, MeterReading, MeterRequest, MeterReset, MeterResume, MeterSample, MeterTool } from '../types'
 
 const PANE = 'ctx'
 // A level fires again only once its figure has fallen this far below it: a window reset or a /compact.
@@ -46,6 +46,12 @@ const samples = atom({ plugin: 'session-meter', key: 'samples' } as const, [] as
 const notes = atom({ plugin: 'session-meter', key: 'notes' } as const, [] as MeterNote[])
 const tools = atom({ plugin: 'session-meter', key: 'tools' } as const, [] as MeterTool[])
 const requests = atom({ plugin: 'session-meter', key: 'requests' } as const, [] as MeterRequest[])
+// The reset the model asked for, run when its turn ends, and the next step it leaves behind. Held by the host, so a
+// hot reload of this module between the call, the reset and the Continue's dequeue keeps them.
+const pending = atom({ plugin: 'session-meter', key: 'pending' } as const, null as MeterReset | null)
+// What the model reads once a reset ends, sent as a prompt of its own. A prompt sent while the reset ran is dequeued
+// ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes.
+const resume = atom({ plugin: 'session-meter', key: 'resume' } as const, null as MeterResume | null)
 
 // Subagent ids never change type, so one lookup per id is enough.
 const agentTypes = new Map<string, string>()
@@ -220,7 +226,7 @@ export const meter = (pct: number, w: number): Seg[] => {
   return out
 }
 
-export type Reset = { mode: 'compact'; next?: string } | { mode: 'clear'; handoff: string }
+export type Reset = MeterReset
 
 // Reads the model's context_reset call: the reset to run after the turn, or why it is refused.
 export const checkReset = (input: Record<string, unknown>, action: ContextAction): Reset | string => {
@@ -305,17 +311,11 @@ const agentLabel = async ($: EngineInterface, id: string | undefined) => {
 export const register: Register = (on, options) => {
   const { action, contextAt } = readOptions(options)
   const thresholds = levels(contextAt)
-  // ponytail: held in the module, so a hot reload between the call and the turn's end drops the reset.
-  let pending: Reset | undefined
   // A plain -p run ends with the turn, so the tool would only stop the work. The desktop app is headless too,
   // but it stays open and attaches as a surface, which a -p run never does.
   let live: ContextAction = 'suggest'
   // Only the REPL can compact from a hook; a headless host compacts through a queued /compact.
   let isRepl = false
-  // What the model reads once a reset ends, sent as a prompt of its own. A prompt sent while the reset ran is dequeued
-  // ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes.
-  // ponytail: held in the module like `pending`; a hot reload before the separate prompt is dequeued lets it through.
-  let resume: { alone: string; carried: string; taken?: true } | undefined
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
@@ -356,19 +356,25 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
-    // Decided before any await, in the order the prompts are dequeued.
-    if (resume && e.origin?.kind === 'plugin' && e.text === resume.alone) {
-      const { taken } = resume
-      resume = undefined
-      if (taken) return { drop: 'session-meter: the message before it carried the next step' }
-    }
+    // Queued prompts are dequeued one at a time, each once the session is idle, so these awaits keep their order.
     // A meta prompt takes no context and a slash command may not reach the model, so both leave it to the
     // separate prompt.
     let prompt = e
-    if (resume && !resume.taken && !e.isMeta && !e.command) {
-      resume.taken = true
-      prompt = { ...e, context: [...(e.context ?? []), resume.carried] }
-    }
+    let isDropped = false
+    if (await read($, resume))
+      await update($, resume, r => {
+        isDropped = false
+        prompt = e
+        if (!r) return r
+        if (e.origin?.kind === 'plugin' && e.text === r.alone) {
+          isDropped = r.taken === true
+          return null
+        }
+        if (r.taken || e.isMeta || e.command) return r
+        prompt = { ...e, context: [...(e.context ?? []), r.carried] }
+        return { ...r, taken: true as const }
+      })
+    if (isDropped) return { drop: 'session-meter: the message before it carried the next step' }
     const r = await read($, reading)
     const crossed = cross(r, await read($, fired), thresholds)
     await update($, fired, () => crossed.fired)
@@ -386,33 +392,40 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return { isError: true as const, result: 'Only the main conversation can reset its context.' }
     if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
     if (typeof reset === 'string') return { isError: true as const, result: reset }
-    pending = reset
+    await update($, pending, () => reset)
     return { result: `The ${reset.mode} runs when this turn ends. End your turn now with one short line.` }
   })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
-    const job = pending
-    if (e.agentId !== undefined || !job) return result
-    pending = undefined
+    if (e.agentId !== undefined) return result
+    const job = await read($, pending)
+    if (!job) return result
+    await update($, pending, () => null)
     // An interrupted turn hands control back to the user: no reset behind their back.
     if (e.reason !== 'answer') return result
     let saved: string | undefined
+    // What the model reads once the reset ends. Kept armed: the prompt.submit hook drops it if a prompt dequeued
+    // before it has carried the text.
+    let alone: string | undefined
     try {
       if (job.mode === 'compact') {
         $.ui.toast(job.next ? 'session-meter: compacting, then continuing' : 'session-meter: compacting')
         const instructions = job.next ? `The work continues with: ${job.next}` : undefined
-        if (job.next)
-          resume = {
+        if (job.next) {
+          const armed = {
             alone: `session-meter compacted the conversation. Continue: ${job.next}`,
             carried: `session-meter compacted the conversation just before this message. Its next step was: ${job.next}\nHandle this message first, then go on with that step if it still applies.`,
           }
+          alone = armed.alone
+          await update($, resume, () => armed)
+        }
         // A queued /compact reports no veto, so only the REPL's direct call can come back skipped.
         let skip: string | undefined
         if (isRepl) skip = (await $.session.compact(instructions === undefined ? undefined : { instructions })).skip
         else await $.command.run({ command: 'compact', args: instructions ?? '' })
         if (skip !== undefined) {
-          resume = undefined
+          await update($, resume, () => null)
           $.ui.toast(`session-meter: compaction skipped: ${skip}`)
           return result
         }
@@ -421,16 +434,25 @@ export const register: Register = (on, options) => {
         saved = await saveHandoff($, job.handoff)
         $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)
         const text = `session-meter cleared the previous conversation. Its handoff, also saved to ${saved}:\n\n${job.handoff}`
-        resume = { alone: text, carried: text }
+        alone = text
+        await update($, resume, () => ({ alone: text, carried: text }))
         await $.command.run({ command: 'clear' })
       }
-      // Kept armed: the prompt.submit hook drops this one if a prompt dequeued before it has carried the text.
-      if (resume) await $.prompt.submit({ text: resume.alone })
+      if (alone) await $.prompt.submit({ text: alone })
     } catch (err) {
-      resume = undefined
+      await update($, resume, () => null)
       $.ui.toast(`session-meter: ${job.mode} failed: ${String(err)}${saved ? `; handoff saved to ${saved}` : ''}`)
     }
     return result
+  })
+
+  // A /clear keeps the reset's state for the conversation it starts; any other end leaves none for the next session.
+  on('session.end', async ($, e, next) => {
+    if (e.reason !== 'clear') {
+      await update($, pending, () => null)
+      await update($, resume, () => null)
+    }
+    return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
