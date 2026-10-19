@@ -152,3 +152,39 @@ export const pathWords = (segment: string): string[] => {
   if (current) words.push(current)
   return words
 }
+
+// Splits a segment into shell words, keeping their quotes. An operator such as `<`, `2>`, `<>` or `&` is a token of its own,
+// as it is in bash. Undefined when a quote is left open.
+const SHELL_TOKEN = /\d*[<>&|;()]+|(?:[^\s'"\\<>&|;()]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")+/g
+const OPERATOR = /^\d*[<>&|;()]/
+const shellTokens = (segment: string): string[] | undefined =>
+  segment.replace(SHELL_TOKEN, '').trim() === '' ? (segment.match(SHELL_TOKEN) ?? []) : undefined
+
+// The jq options that take values, and how many.
+const JQ_OPTION_VALUES = new Map([['--indent', 1], ['-L', 1], ['--arg', 2], ['--argjson', 2], ['--slurpfile', 2], ['--rawfile', 2]])
+
+// jq reads its first argument that is not an option as a filter, so `jq '.env.PATH' settings.json` names a key, not a file.
+// The filter is dropped and every other word is still read: files, option values and redirect targets. Nothing is dropped with
+// `-f` (the filter comes from a file), with a filter that imports a module (that reads a JSON file), or after an operator other
+// than a redirect, such as a lone `&` that starts a second command.
+export const withoutJqFilter = (segment: string): string => {
+  if (!/^(\S*\/)?jq\s/.test(segment)) return segment
+  const tokens = shellTokens(segment)
+  if (!tokens) return segment
+  let isOptionsEnd = false
+  for (let index = 1; index < tokens.length; index++) {
+    const token = tokens[index] ?? ''
+    if (OPERATOR.test(token)) {
+      if (!/[<>]/.test(token)) return segment
+      index++
+    } else if (!isOptionsEnd && token.startsWith('-')) {
+      if (token === '--') isOptionsEnd = true
+      else if (token === '--from-file' || /^-[a-zA-Z]*f/.test(token)) return segment
+      else index += JQ_OPTION_VALUES.get(token) ?? 0
+    } else {
+      if (/\b(import|include)\b/.test(token)) return segment
+      return tokens.filter((_, tokenIndex) => tokenIndex !== index).join(' ')
+    }
+  }
+  return segment
+}

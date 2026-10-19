@@ -159,6 +159,19 @@ test('a template name followed by punctuation is a template, a credential file s
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
+test('a jq filter names a key, not a file, while every file jq reads is still checked', () => {
+  for (const c of [`jq -r '.env.CLAUDE_CODE_PLUGIN_DIRS // ""' "$HOME/.claude/settings.json"`, `jq '.env' settings.json`, 'jq .env.FOO settings.json',
+    `jq -r --arg k v '.env | keys[]' ~/.claude/settings.json`, 'jq --indent 4 .env.FOO settings.json', 'cat settings.json | jq -c .env', 'jq -- .env settings.json',
+    '/usr/bin/jq .env settings.json', `jq -n --rawfile notes notes.md '.env'`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat .env.PROD', 'jq . .env.PROD', `jq -r '.x' .env`, `jq --rawfile x .env -n '$x'`, `jq -n --slurpfile x .env.local '$x'`,
+    'jq -f .env', 'jq -rf .env settings.json', 'jq --from-file .env', `jq '.x' < .env`, `jq < .env '.x'`, 'jq <.env .x', `jq --arg a b '.x' .env`,
+    'jq -L lib .x .env', 'jq -- .env.x .env', `jq '.x' $(cat .env)`, `jq '.env.x .env`, 'jq -R .<.env', 'jq -r .auths<~/.docker/config.json',
+    'jq .>.env', 'jq <> .env -R .', 'jq 0<> .env .', 'jq -nR&cat .env', 'jq -c&cat ~/.ssh/id_rsa', 'jq -n&>/dev/null&cat ~/.aws/credentials',
+    `jq -n 'import "a" as $c; .env.KEY'`, 'jq 2>/dev/null .x .env'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
