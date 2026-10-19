@@ -436,8 +436,10 @@ export const register: Register = (on, options) => {
         $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)
         const text = `session-meter cleared the previous conversation. Its handoff, also saved to ${saved}:\n\n${job.handoff}`
         alone = text
-        await update($, resume, () => ({ alone: text, carried: text }))
         await $.command.run({ command: 'clear' })
+        // The host empties every plugin's $.state once a session ends, a /clear's included, so the step is held only
+        // once the clear has run: in the conversation it started, which no other session reads.
+        await update($, resume, () => ({ alone: text, carried: text }))
       }
       // The REPL's direct call and a queued /compact or /clear behind command.run both resolve once the reset has run.
       // No hook of ours can tell: the host does not run them for an event raised beneath our own pending call.
@@ -448,15 +450,6 @@ export const register: Register = (on, options) => {
       $.ui.toast(`session-meter: ${job.mode} failed: ${String(err)}${saved ? `; handoff saved to ${saved}` : ''}`)
     }
     return result
-  })
-
-  // A /clear keeps the reset's state for the conversation it starts; any other end leaves none for the next session.
-  on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear') {
-      await update($, pending, () => null)
-      await update($, resume, () => null)
-    }
-    return next(e)
   })
 
   on('tool.call', async ($, e, next) => {
