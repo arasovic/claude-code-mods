@@ -21,6 +21,8 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.
 - The mod does not read quoted text as commands. So `grep -E "(export )?" file` runs.
+- A backslash in quotes is part of a search pattern, so `grep -rn '\.env' .` runs. Outside quotes it escapes the next character, so `cat \.env` is still blocked. A backslash separates directories only in a Windows path (`C:\…`, `\\server\…`).
+- Punctuation right after a file name is not part of it, so `git commit -m "copy .env.example, then edit"` runs. After `.` or `/` it stays, so `grep -r token ~/.ssh/.` is still blocked.
 - The mod treats a heredoc as data when `cat` or `tee` writes it out with a quoted delimiter, as in `cat > notes.py <<'EOF'`. It does not check that body. This holds only when the opener line has nothing but `&&` steps before it, and no `{`, `(` or `$(` is still open.
 - The mod checks every other heredoc body. `python3 - <<'EOF'` runs its body as code. A `<<EOF` body runs any `$(…)` in it. So a credential file name (`.env`) in such a body is blocked.
 - The mod does not read quotes in a heredoc body that runs. So a quoted `env` or `export` there is blocked, as in `grep -E "(export )?" f` in a `bash <<'EOF'` body, or `print('env')` in a `python3 <<'EOF'` body.
@@ -36,6 +38,7 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 - Secrets in a format it does not know pass through.
 - A connection URL password shorter than 8 characters, or with a raw `/` in it, is not hidden. A percent-encoded `/` (`%2F`) is fine. Dev passwords such as `postgres:postgres@` are hidden, so a shell command that holds one is refused.
 - A name followed by `(` is read as a function call, not a file, so `grep "mock.env(" tests` runs. A zsh glob qualifier on a credential file (`cat .env(N)`) gets through the same way; known key formats in its output are still hidden. Code names such as `process.env`, `import.meta.env` and `c.env` are not files either, but a script that prints the whole environment (`console.log(process.env)`, `print(os.environ)`) is blocked.
+- `jq` reads its first argument as a filter, so `jq '.env.PATH' settings.json` runs. The files it reads are still checked, including `--rawfile` and `--slurpfile` values, redirects, and the filter file of `-f`. Other tools with a filter argument, such as `yq`, are not read this way.
 - Commands that touch a credential file without printing it still run: `ls`, `stat`, `test` / `[`, `touch`, `chmod`, `chown`, `rm`. `cp` and `mv` run when the credential file is the target (`cp .env.example .env`), not when it is the source, so a file cannot be copied to a new name and read there.
 - The screen can show a row for a moment before it is rewritten. Claude and the transcript only read the hidden form.
 - A value hidden in source code, such as a test token, is hidden from Claude as well. Claude can still edit the other lines of that file. A write that would put a `[secret-guard: <rule>]` tag back into a file is refused, so the real value is never overwritten; Claude will ask you to change that line.

@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { commandSegments, withoutDataHeredocs } from './shell-read'
+import { commandSegments, pathWords, withoutDataHeredocs, withoutJqFilter } from './shell-read'
 
 // Derived from gitleaks' default rules, loosened where key formats change.
 const SECRET_RULES: readonly [string, RegExp][] = [
@@ -67,7 +67,7 @@ export const scrubDeep = <T>(value: T, found: string[]): T => {
 // Matched against the lowercased path with forward slashes and a leading slash.
 const SENSITIVE_PATHS: readonly RegExp[] = [
   // `name.env` files, but not the code spellings a search names (`grep -rn process.env src`).
-  /\/\.env$/, /\/\.env\.(?!(example|sample|template|defaults|dist)$)[^/]+$/, /\/(?!(process|import\.meta|c)\.env$)[^/]+\.env$/,
+  /\/\.env$/, /\/\.env\.(?!(example|sample|template|defaults|dist)$)[^/]+$/, /\/(?!(process|import\.meta|c)\.env$)[^/\\]+\.env$/,
   /\/\.envrc$/, /\/\.dev\.vars(\.[^/]+)?$/, /\/\.flaskenv$/,
   /\/\.(aws|gem|cargo|config\/git)\/credentials(\.toml)?$/, /\/credentials\.json$/, /\/service-account[^/]*\.json$/, /\/\.vault-token$/, /\/\.vault_pass$/,
   // A bare `e.key` or `event.key` in a command is code reading a field (`store.get(e.key)`), not a key file; a path to one still counts.
@@ -88,7 +88,9 @@ const SENSITIVE_PATHS: readonly RegExp[] = [
 
 export const sensitivePath = (path: string, home: string): boolean => {
   const expanded = path.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home)
-  const p = ('/' + expanded.replace(/\\/g, '/')).replace(/\/+/g, '/').toLowerCase()
+  // A backslash separates directories only in a Windows path; elsewhere it is part of a search pattern (`grep '\.env'`).
+  const isWindowsPath = /^(?:[a-z]:\\|\\\\)/i.test(expanded)
+  const p = ('/' + (isWindowsPath ? expanded.replace(/\\/g, '/') : expanded)).replace(/\/+/g, '/').toLowerCase()
   return SENSITIVE_PATHS.some(r => r.test(p))
 }
 
@@ -105,6 +107,10 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   /^(echo|printf)\b.*\$\{?[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)/i,
 ]
 
+// Prose names files too (`copy .env.example, then`). Trailing punctuation after a name is dropped, but not after `.` or `/`,
+// so `~/.ssh/.` still names the folder.
+const withoutTrailingPunctuation = (word: string) => word.replace(/(?<=[^./])[.,;:!?)]+$/, '')
+
 // These touch a credential file without printing what is in it.
 const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown', 'rm'])
 
@@ -114,12 +120,12 @@ export const secretCommand = (command: string, home: string): string | undefined
   if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(runnable)) return 'printing the whole environment prints secrets'
   for (const seg of commandSegments(runnable)) {
     if (SECRET_COMMANDS.some(r => r.test(seg))) return `\`${seg.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
-    const words = seg.split(/\s+|[<>]=?|=/).map(w => w.replace(/^["']|["']$/g, '')).filter(Boolean)
+    const words = pathWords(withoutJqFilter(seg))
     const cmd = words[0] ?? ''
     if (NON_READING.has(cmd)) continue
     // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
     const checked = cmd === 'cp' || cmd === 'mv' ? words.slice(1, -1) : words
-    const token = checked.find(w => sensitivePath(w, home))
+    const token = checked.find(w => sensitivePath(withoutTrailingPunctuation(w), home))
     if (token) return `${token} is a credential file`
   }
   return undefined

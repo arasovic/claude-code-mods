@@ -143,6 +143,35 @@ test('a comment, a line continuation, a $\'…\' quote or a quote in a <<EOF bod
     expect(secretCommand(c, HOME)).toBeUndefined()
 })
 
+test('a quoted search pattern is not a credential file, an escaped file name still is', () => {
+  for (const c of [`grep -rn '\\.env' .`, 'grep "\\.env" x', `grep -E '\\\\.env|env' f`, `rg -n 'prod\\.env|API' src`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat \\.env', 'cat app/\\.env', 'bash -c "cat x | cat .env"', `cat 'C:\\Users\\me\\.env'`, `cat '.env'`])
+    expect(secretCommand(c, HOME)).toBeDefined()
+  expect(sensitivePath('C:\\Users\\me\\.env', HOME)).toBe(true)
+  expect(sensitivePath('\\\\server\\share\\.env', HOME)).toBe(true)
+})
+
+test('a template name followed by punctuation is a template, a credential file still is not', () => {
+  for (const c of ['git commit -m "copy .env.example, then edit"', 'echo see .env.example.', 'echo (or .env.example)', 'cat ~/.ssh/id_rsa.pub:'])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat .env,', 'cat .env.local.', 'cat app/secret.key;x', 'grep -r token ~/.ssh/.', 'cat ~/.ssh/id_rsa,'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
+test('a jq filter names a key, not a file, while every file jq reads is still checked', () => {
+  for (const c of [`jq -r '.env.CLAUDE_CODE_PLUGIN_DIRS // ""' "$HOME/.claude/settings.json"`, `jq '.env' settings.json`, 'jq .env.FOO settings.json',
+    `jq -r --arg k v '.env | keys[]' ~/.claude/settings.json`, 'jq --indent 4 .env.FOO settings.json', 'cat settings.json | jq -c .env', 'jq -- .env settings.json',
+    '/usr/bin/jq .env settings.json', `jq -n --rawfile notes notes.md '.env'`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat .env.PROD', 'jq . .env.PROD', `jq -r '.x' .env`, `jq --rawfile x .env -n '$x'`, `jq -n --slurpfile x .env.local '$x'`,
+    'jq -f .env', 'jq -rf .env settings.json', 'jq --from-file .env', `jq '.x' < .env`, `jq < .env '.x'`, 'jq <.env .x', `jq --arg a b '.x' .env`,
+    'jq -L lib .x .env', 'jq -- .env.x .env', `jq '.x' $(cat .env)`, `jq '.env.x .env`, 'jq -R .<.env', 'jq -r .auths<~/.docker/config.json',
+    'jq .>.env', 'jq <> .env -R .', 'jq 0<> .env .', 'jq -nR&cat .env', 'jq -c&cat ~/.ssh/id_rsa', 'jq -n&>/dev/null&cat ~/.aws/credentials',
+    `jq -n 'import "a" as $c; .env.KEY'`, 'jq 2>/dev/null .x .env'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
