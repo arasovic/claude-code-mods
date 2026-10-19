@@ -15,7 +15,7 @@ concurrency:
 
 env:
   # ponytail: bumped by hand with each Claude Code release the mods are tested on.
-  CLAUDE_CODE_VERSION: 2.1.296
+  CLAUDE_CODE_VERSION: 2.1.300
 
 jobs:
   check:
