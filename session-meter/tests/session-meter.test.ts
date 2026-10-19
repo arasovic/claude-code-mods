@@ -153,24 +153,33 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
   expect(seen[2]).toBeUndefined()
 })
 
-// A session at 80% context whose engine calls the reset path makes are recorded. A compaction or a
-// queued command holds until `hold` settles, and `running` settles once one has begun.
-const resetSession = (on: On, hold?: Promise<void>, held?: Map<string, unknown>) => {
+// Where a reset waits for `until`: a queued command in the queue, behind prompts queued before it; inside
+// the compaction; or after the compaction or clear, before the continue prompt.
+type Hold = { at: 'queue' | 'compaction' | 'after'; until: Promise<void> }
+
+// A session at 80% context whose engine calls the reset path makes are recorded. A queued /compact or
+// /clear runs as the person's would. `running` settles once the reset waits at `hold`.
+const resetSession = ($: Engine, on: On, hold?: Hold, held?: Map<string, unknown>) => {
   mock.clock(on)
   memoryState(on, held)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const tools: string[] = []
   on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 80 }, rateLimits: [] } }))
-  const compacts: unknown[] = []
   let begin = () => {}
   const running = new Promise<void>(resolve => (begin = resolve))
+  const wait = async (at: Hold['at']) => {
+    if (hold?.at !== at) return
+    begin()
+    await hold.until
+  }
+  const compacts: unknown[] = []
   on('session.compact', async (_$, e) => {
     compacts.push(e.instructions)
-    begin()
-    await hold
+    await wait('compaction')
     return { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }
   })
   const submits: { text: string; context?: readonly string[] }[] = []
@@ -181,15 +190,25 @@ const resetSession = (on: On, hold?: Promise<void>, held?: Map<string, unknown>)
   const runs: string[] = []
   on('command.run', async (_$, e) => {
     runs.push(`/${e.command} ${e.args}`.trim())
-    begin()
-    await hold
+    await wait('queue')
+    if (e.command === 'compact') await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'go', toolUses: [] }], ...(e.args ? { instructions: e.args } : {}) })
+    if (e.command === 'clear') await $.session.end({ reason: 'clear', sessionId: 'abcdef1234', resume: { id: 'abcdef1234' } })
+    await wait('after')
     return { text: '' }
   })
   return { tools, compacts, submits, toasts, runs, running }
 }
 
 test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
-  const { tools, compacts, submits, toasts } = resetSession(on)
+  // The REPL's own $.session.compact runs session-meter's session.compact hook too, which readies the step.
+  const resumes: unknown[] = []
+  const held = new (class extends Map<string, unknown> {
+    override set(key: string, value: unknown) {
+      if (key === 'resume') resumes.push(value)
+      return super.set(key, value)
+    }
+  })()
+  const { tools, compacts, submits, toasts } = resetSession($, on, undefined, held)
   const reset = async (input: Record<string, string>) => {
     await $.tool.call({ tool: 'mcp__session-meter__context_reset', ...input })
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
@@ -200,6 +219,7 @@ test('a compact with next submits it as the next prompt, and one without next wa
   await reset({ mode: 'compact', next: 'run the tests' })
   expect(compacts).toEqual(['The work continues with: run the tests'])
   expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
+  expect(resumes).toContainEqual(expect.objectContaining({ ready: true }))
 
   await reset({ mode: 'compact' })
   expect(compacts).toEqual(['The work continues with: run the tests', undefined])
@@ -208,7 +228,7 @@ test('a compact with next submits it as the next prompt, and one without next wa
 })
 
 test('a headless session gets no context_reset tool and the suggest note', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
-  const { tools, submits } = resetSession(on)
+  const { tools, submits } = resetSession($, on)
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
   await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })
@@ -221,7 +241,7 @@ test('a headless session gets no context_reset tool and the suggest note', { opt
 })
 
 test('a headless session the desktop attaches to gets the tool and compacts through a queued /compact', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
-  const { tools, compacts, submits, runs } = resetSession(on)
+  const { tools, compacts, submits, runs } = resetSession($, on)
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
   await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
@@ -230,7 +250,7 @@ test('a headless session the desktop attaches to gets the tool and compacts thro
 
   await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
   await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
-  expect(compacts).toEqual([])
+  expect(compacts).toEqual(['The work continues with: run the tests'])
   expect(runs).toEqual(['/compact The work continues with: run the tests'])
   expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
 })
@@ -244,21 +264,37 @@ const sendDuringReset = async ($: Engine, running: Promise<void>, release: () =>
   await turn
 }
 
-test('a prompt sent while the compaction runs carries the next step, and no continue prompt follows it', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+const ALONE = 'session-meter compacted the conversation. Continue: run the tests'
+
+test('a prompt whose hook runs before the compaction is done gets no step, and the continue prompt still follows', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   let release = () => {}
-  const { submits, running } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+  const { submits, running } = resetSession($, on, { at: 'compaction', until: new Promise<void>(resolve => (release = resolve)) })
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
   await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
   await sendDuringReset($, running, release, 'both codes are 200')
 
-  expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
-  expect(submits[0]?.context?.join('\n')).toContain('Its next step was: run the tests')
+  expect(submits.map(p => p.text)).toEqual(['both codes are 200', ALONE])
+  expect(submits[0]?.context?.join('\n') ?? '').not.toContain('run the tests')
 })
 
-test('in the desktop app a prompt sent during the queued /compact carries the step; one sent after it does not', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+test('in the desktop app a prompt queued ahead of the /compact runs before it without the step, and the continue prompt still follows', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   let release = () => {}
-  const { submits, running, runs } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+  const { submits, running, runs } = resetSession($, on, { at: 'queue', until: new Promise<void>(resolve => (release = resolve)) })
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
+  await sendDuringReset($, running, release, 'a note from a linked session')
+
+  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(submits.map(p => p.text)).toEqual(['a note from a linked session', ALONE])
+  expect(submits[0]?.context?.join('\n') ?? '').not.toContain('run the tests')
+})
+
+test('in the desktop app a prompt dequeued after the /compact carries the step; one sent after it does not', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running, runs } = resetSession($, on, { at: 'after', until: new Promise<void>(resolve => (release = resolve)) })
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
   await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
@@ -274,7 +310,7 @@ test('in the desktop app a prompt sent during the queued /compact carries the st
 
 test('a slash command sent during the compaction leaves the step to the continue prompt', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   let release = () => {}
-  const { submits, running } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+  const { submits, running } = resetSession($, on, { at: 'compaction', until: new Promise<void>(resolve => (release = resolve)) })
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
   await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
@@ -284,12 +320,12 @@ test('a slash command sent during the compaction leaves the step to the continue
   release()
   await turn
 
-  expect(submits.map(p => p.text)).toEqual(['/model', 'session-meter compacted the conversation. Continue: run the tests'])
+  expect(submits.map(p => p.text)).toEqual(['/model', ALONE])
 })
 
-test('a prompt sent while the clear runs carries the handoff, and the handoff is not sent again', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
+test('a prompt dequeued after the clear carries the handoff, and the handoff is not sent again', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
   let release = () => {}
-  const { submits, running, runs } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+  const { submits, running, runs } = resetSession($, on, { at: 'after', until: new Promise<void>(resolve => (release = resolve)) })
   on('session.id', () => ({ value: 'abcdef1234' }))
   on('session.cwd', () => ({ value: '/repo' }))
   mock.env(on, { HOME: '/home/me' })
@@ -308,9 +344,9 @@ test('a prompt sent while the clear runs carries the handoff, and the handoff is
 test('a module reloaded after the reset still carries the step on the next prompt and drops its own continue', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   // What the module wrote before the reload: the compaction ran and the continue prompt waits in the queue.
   const alone = 'session-meter compacted the conversation. Continue: run the tests'
-  const armed: MeterResume = { alone, carried: 'session-meter compacted the conversation just before this message. Its next step was: run the tests' }
+  const armed: MeterResume = { alone, carried: 'session-meter compacted the conversation just before this message. Its next step was: run the tests', ready: true }
   const held = new Map<string, unknown>([['resume', armed]])
-  const { submits } = resetSession(on, undefined, held)
+  const { submits } = resetSession($, on, undefined, held)
 
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
   await $.prompt.submit({ text: 'both codes are 200', wait: false, origin: { kind: 'composer' } })
@@ -358,7 +394,7 @@ test('off the terminal only names, targets and labels give way; numbers and titl
 })
 
 test('the pane opens on its own only in a terminal session', async ($, on) => {
-  resetSession(on)
+  resetSession($, on)
   const opened: string[] = []
   on('ui.open', (_$, e) => (opened.push(e.id), { value: { isPlaced: true } }))
 

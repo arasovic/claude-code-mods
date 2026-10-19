@@ -50,7 +50,8 @@ const requests = atom({ plugin: 'session-meter', key: 'requests' } as const, [] 
 // hot reload of this module between the call, the reset and the Continue's dequeue keeps them.
 const pending = atom({ plugin: 'session-meter', key: 'pending' } as const, null as MeterReset | null)
 // What the model reads once a reset ends, sent as a prompt of its own. A prompt sent while the reset ran is dequeued
-// ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes.
+// ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes. It is
+// `ready` only once the reset has run: a prompt queued ahead of the /compact or /clear is dequeued before it.
 const resume = atom({ plugin: 'session-meter', key: 'resume' } as const, null as MeterResume | null)
 
 // Subagent ids never change type, so one lookup per id is enough.
@@ -370,7 +371,7 @@ export const register: Register = (on, options) => {
           isDropped = r.taken === true
           return null
         }
-        if (r.taken || e.isMeta || e.command) return r
+        if (!r.ready || r.taken || e.isMeta || e.command) return r
         prompt = { ...e, context: [...(e.context ?? []), r.carried] }
         return { ...r, taken: true as const }
       })
@@ -429,6 +430,8 @@ export const register: Register = (on, options) => {
           $.ui.toast(`session-meter: compaction skipped: ${skip}`)
           return result
         }
+        // The REPL's direct call has compacted once it resolves; a queued /compact readies the step in its own hook.
+        if (isRepl) await update($, resume, r => r && { ...r, ready: true as const })
         if (!job.next) $.ui.toast('session-meter: compacted; waiting for you')
       } else {
         saved = await saveHandoff($, job.handoff)
@@ -446,9 +449,17 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // A /clear keeps the reset's state for the conversation it starts; any other end leaves none for the next session.
+  // A queued /compact runs as the person's does, so it readies the next step here once it has compacted.
+  on('session.compact', { trigger: 'manual' }, async ($, e, next) => {
+    const result = await next(e)
+    if (result.skip === undefined) await update($, resume, r => r && { ...r, ready: true as const })
+    return result
+  })
+
+  // A /clear keeps the reset's state for the conversation it starts, ready; any other end leaves none for the next session.
   on('session.end', async ($, e, next) => {
-    if (e.reason !== 'clear') {
+    if (e.reason === 'clear') await update($, resume, r => r && { ...r, ready: true as const })
+    else {
       await update($, pending, () => null)
       await update($, resume, () => null)
     }
