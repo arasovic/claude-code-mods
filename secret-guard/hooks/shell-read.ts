@@ -124,3 +124,31 @@ export const withoutDataHeredocs = (command: string): string => {
   }
   return kept.join('\n')
 }
+
+// Splits a segment into the words the path check reads. Whitespace, `<`, `>` and `=` split even inside quotes,
+// because a quoted string can hold a command (`bash -c "cat .env"`). Quotes are removed. A backslash outside
+// quotes escapes the next character, so `\.env` is `.env`; inside single quotes it stays, so `'\.env'` is a pattern.
+export const pathWords = (segment: string): string[] => {
+  const words: string[] = []
+  let current = ''
+  let quote: '"' | "'" | null = null
+  for (let index = 0; index < segment.length; index++) {
+    const char = segment[index] ?? ''
+    const next = segment[index + 1] ?? ''
+    if (/[\s<>=]/.test(char)) {
+      if (current) words.push(current)
+      current = ''
+    } else if (quote === null && (char === "'" || char === '"')) {
+      quote = char
+    } else if (char === quote) {
+      quote = null
+    } else if (char === '\\' && (quote === null || (quote === '"' && '$`"\\'.includes(next)))) {
+      current += next
+      index++
+    } else {
+      current += char
+    }
+  }
+  if (current) words.push(current)
+  return words
+}

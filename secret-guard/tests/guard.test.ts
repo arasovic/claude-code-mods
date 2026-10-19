@@ -143,6 +143,22 @@ test('a comment, a line continuation, a $\'…\' quote or a quote in a <<EOF bod
     expect(secretCommand(c, HOME)).toBeUndefined()
 })
 
+test('a quoted search pattern is not a credential file, an escaped file name still is', () => {
+  for (const c of [`grep -rn '\\.env' .`, 'grep "\\.env" x', `grep -E '\\\\.env|env' f`, `rg -n 'prod\\.env|API' src`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat \\.env', 'cat app/\\.env', 'bash -c "cat x | cat .env"', `cat 'C:\\Users\\me\\.env'`, `cat '.env'`])
+    expect(secretCommand(c, HOME)).toBeDefined()
+  expect(sensitivePath('C:\\Users\\me\\.env', HOME)).toBe(true)
+  expect(sensitivePath('\\\\server\\share\\.env', HOME)).toBe(true)
+})
+
+test('a template name followed by punctuation is a template, a credential file still is not', () => {
+  for (const c of ['git commit -m "copy .env.example, then edit"', 'echo see .env.example.', 'echo (or .env.example)', 'cat ~/.ssh/id_rsa.pub:'])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['cat .env,', 'cat .env.local.', 'cat app/secret.key;x', 'grep -r token ~/.ssh/.', 'cat ~/.ssh/id_rsa,'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
