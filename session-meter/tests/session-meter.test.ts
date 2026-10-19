@@ -2,6 +2,7 @@ import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
+import type { MeterResume } from '../types'
 
 const at = (context: number | null, fiveHour?: number, sevenDay?: number) => ({
   context,
@@ -117,9 +118,8 @@ test('heaviest groups MCP tools by server and keeps the top three', () => {
   ])
 })
 
-// The plugin's $.state, kept in memory for the hook tests.
-const memoryState = (on: On) => {
-  const held = new Map<string, unknown>()
+// The plugin's $.state, kept in memory for the hook tests; a `held` given in stands for what the host kept across a reload.
+const memoryState = (on: On, held = new Map<string, unknown>()) => {
   let version = 0
   on('state.get', (_$, e) => ({ value: { value: held.get(e.key), version } }))
   on('state.set', (_$, e) => {
@@ -155,9 +155,9 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
 
 // A session at 80% context whose engine calls the reset path makes are recorded. A compaction or a
 // queued command holds until `hold` settles, and `running` settles once one has begun.
-const resetSession = (on: On, hold?: Promise<void>) => {
+const resetSession = (on: On, hold?: Promise<void>, held?: Map<string, unknown>) => {
   mock.clock(on)
-  memoryState(on)
+  memoryState(on, held)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -303,6 +303,22 @@ test('a prompt sent while the clear runs carries the handoff, and the handoff is
   expect(runs).toEqual(['/clear'])
   expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
   expect(submits[0]?.context?.join('\n')).toContain(handoff.trim())
+})
+
+test('a module reloaded after the reset still carries the step on the next prompt and drops its own continue', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  // What the module wrote before the reload: the compaction ran and the continue prompt waits in the queue.
+  const alone = 'session-meter compacted the conversation. Continue: run the tests'
+  const armed: MeterResume = { alone, carried: 'session-meter compacted the conversation just before this message. Its next step was: run the tests' }
+  const held = new Map<string, unknown>([['resume', armed]])
+  const { submits } = resetSession(on, undefined, held)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  await $.prompt.submit({ text: 'both codes are 200', wait: false, origin: { kind: 'composer' } })
+  await $.prompt.submit({ text: alone, wait: false, origin: { kind: 'plugin', name: 'session-meter' } })
+
+  expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
+  expect(submits[0]?.context?.join('\n')).toContain('Its next step was: run the tests')
+  expect(held.get('resume')).toBeNull()
 })
 
 const PANE = { title: 'Context', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const

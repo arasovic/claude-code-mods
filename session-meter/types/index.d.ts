@@ -7,6 +7,8 @@ export type MeterSample = { kind: string; at: number; pct: number; resetsAt?: st
 export type MeterNote = { at: number; text: string }
 export type MeterTool = { id: string; name: string; target: string; sub: boolean; at: number; ms?: number; ok?: boolean }
 export type MeterRequest = { at: number; agent: string; input: number; cached: number; output: number; ms: number; model: string }
+export type MeterReset = { mode: 'compact'; next?: string } | { mode: 'clear'; handoff: string }
+export type MeterResume = { alone: string; carried: string; taken?: true }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -19,6 +21,8 @@ declare module 'claude-code' {
       notes: MeterNote[]
       tools: MeterTool[]
       requests: MeterRequest[]
+      pending: MeterReset | null
+      resume: MeterResume | null
     }
   }
 }
