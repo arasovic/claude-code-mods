@@ -312,6 +312,10 @@ export const register: Register = (on, options) => {
   let live: ContextAction = 'suggest'
   // Only the REPL can compact from a hook; a headless host compacts through a queued /compact.
   let isRepl = false
+  // What the model reads once a reset ends, sent as a prompt of its own. A prompt sent while the reset ran is dequeued
+  // ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes.
+  // ponytail: held in the module like `pending`; a hot reload before the separate prompt is dequeued lets it through.
+  let resume: { alone: string; carried: string; taken?: true } | undefined
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
@@ -352,13 +356,26 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    // Decided before any await, in the order the prompts are dequeued.
+    if (resume && e.origin?.kind === 'plugin' && e.text === resume.alone) {
+      const { taken } = resume
+      resume = undefined
+      if (taken) return { drop: 'session-meter: the message before it carried the next step' }
+    }
+    // A meta prompt takes no context and a slash command may not reach the model, so both leave it to the
+    // separate prompt.
+    let prompt = e
+    if (resume && !resume.taken && !e.isMeta && !e.command) {
+      resume.taken = true
+      prompt = { ...e, context: [...(e.context ?? []), resume.carried] }
+    }
     const r = await read($, reading)
     const crossed = cross(r, await read($, fired), thresholds)
     await update($, fired, () => crossed.fired)
-    if (crossed.fresh.length === 0) return next(e)
+    if (crossed.fresh.length === 0) return next(prompt)
     const now = await $.clock.now()
     await update($, notes, list => [...list, { at: now, text: noteLabel(crossed.fresh) }].slice(-5))
-    return next({ ...e, context: [...(e.context ?? []), note(r, crossed.fresh, now, live)] })
+    return next({ ...prompt, context: [...(prompt.context ?? []), note(r, crossed.fresh, now, live)] })
   })
 
   on('tool.call', { tool: RESET_TOOL }, async ($, e) => {
@@ -385,23 +402,32 @@ export const register: Register = (on, options) => {
       if (job.mode === 'compact') {
         $.ui.toast(job.next ? 'session-meter: compacting, then continuing' : 'session-meter: compacting')
         const instructions = job.next ? `The work continues with: ${job.next}` : undefined
+        if (job.next)
+          resume = {
+            alone: `session-meter compacted the conversation. Continue: ${job.next}`,
+            carried: `session-meter compacted the conversation just before this message. Its next step was: ${job.next}\nHandle this message first, then go on with that step if it still applies.`,
+          }
         // A queued /compact reports no veto, so only the REPL's direct call can come back skipped.
         let skip: string | undefined
         if (isRepl) skip = (await $.session.compact(instructions === undefined ? undefined : { instructions })).skip
         else await $.command.run({ command: 'compact', args: instructions ?? '' })
         if (skip !== undefined) {
+          resume = undefined
           $.ui.toast(`session-meter: compaction skipped: ${skip}`)
           return result
         }
-        if (job.next) await $.prompt.submit({ text: `session-meter compacted the conversation. Continue: ${job.next}` })
-        else $.ui.toast('session-meter: compacted; waiting for you')
+        if (!job.next) $.ui.toast('session-meter: compacted; waiting for you')
       } else {
         saved = await saveHandoff($, job.handoff)
         $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)
+        const text = `session-meter cleared the previous conversation. Its handoff, also saved to ${saved}:\n\n${job.handoff}`
+        resume = { alone: text, carried: text }
         await $.command.run({ command: 'clear' })
-        await $.prompt.submit({ text: `session-meter cleared the previous conversation. Its handoff, also saved to ${saved}:\n\n${job.handoff}` })
       }
+      // Kept armed: the prompt.submit hook drops this one if a prompt dequeued before it has carried the text.
+      if (resume) await $.prompt.submit({ text: resume.alone })
     } catch (err) {
+      resume = undefined
       $.ui.toast(`session-meter: ${job.mode} failed: ${String(err)}${saved ? `; handoff saved to ${saved}` : ''}`)
     }
     return result

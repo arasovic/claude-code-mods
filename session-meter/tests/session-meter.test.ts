@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
@@ -153,8 +153,9 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
   expect(seen[2]).toBeUndefined()
 })
 
-// A session at 80% context whose engine calls the reset path makes are recorded.
-const resetSession = (on: On) => {
+// A session at 80% context whose engine calls the reset path makes are recorded. A compaction or a
+// queued command holds until `hold` settles, and `running` settles once one has begun.
+const resetSession = (on: On, hold?: Promise<void>) => {
   mock.clock(on)
   memoryState(on)
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -164,15 +165,27 @@ const resetSession = (on: On) => {
   on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
   on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 80 }, rateLimits: [] } }))
   const compacts: unknown[] = []
-  on('session.compact', (_$, e) => (compacts.push(e.instructions), { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }))
+  let begin = () => {}
+  const running = new Promise<void>(resolve => (begin = resolve))
+  on('session.compact', async (_$, e) => {
+    compacts.push(e.instructions)
+    begin()
+    await hold
+    return { messages: [{ role: 'user' as const, text: 'summary', toolUses: [] }] }
+  })
   const submits: { text: string; context?: readonly string[] }[] = []
   on('prompt.submit', (_$, e) => (submits.push({ text: e.text, context: e.context }), { text: e.text }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   const toasts: string[] = []
   on('ui.toast', (_$, e) => (toasts.push(e.text), { value: undefined }))
   const runs: string[] = []
-  on('command.run', (_$, e) => (runs.push(`/${e.command} ${e.args}`.trim()), { text: '' }))
-  return { tools, compacts, submits, toasts, runs }
+  on('command.run', async (_$, e) => {
+    runs.push(`/${e.command} ${e.args}`.trim())
+    begin()
+    await hold
+    return { text: '' }
+  })
+  return { tools, compacts, submits, toasts, runs, running }
 }
 
 test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
@@ -220,6 +233,76 @@ test('a headless session the desktop attaches to gets the tool and compacts thro
   expect(compacts).toEqual([])
   expect(runs).toEqual(['/compact The work continues with: run the tests'])
   expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
+})
+
+// The prompt the person sends while a reset runs, then the reset's end.
+const sendDuringReset = async ($: Engine, running: Promise<void>, release: () => void, text: string) => {
+  const turn = $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  await running
+  await $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } })
+  release()
+  await turn
+}
+
+test('a prompt sent while the compaction runs carries the next step, and no continue prompt follows it', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
+  await sendDuringReset($, running, release, 'both codes are 200')
+
+  expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
+  expect(submits[0]?.context?.join('\n')).toContain('Its next step was: run the tests')
+})
+
+test('in the desktop app a prompt sent during the queued /compact carries the step; one sent after it does not', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running, runs } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
+  await sendDuringReset($, running, release, 'both codes are 200')
+  await $.prompt.submit({ text: 'and now?', wait: false, origin: { kind: 'composer' } })
+
+  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(submits.map(p => p.text)).toEqual(['both codes are 200', 'and now?'])
+  expect(submits[0]?.context?.join('\n')).toContain('Its next step was: run the tests')
+  expect(submits[1]?.context?.join('\n') ?? '').not.toContain('run the tests')
+})
+
+test('a slash command sent during the compaction leaves the step to the continue prompt', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
+  const turn = $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  await running
+  await $.prompt.submit({ text: '/model', wait: false, origin: { kind: 'composer' }, command: { name: 'model', args: '' } })
+  release()
+  await turn
+
+  expect(submits.map(p => p.text)).toEqual(['/model', 'session-meter compacted the conversation. Continue: run the tests'])
+})
+
+test('a prompt sent while the clear runs carries the handoff, and the handoff is not sent again', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running, runs } = resetSession(on, new Promise<void>(resolve => (release = resolve)))
+  on('session.id', () => ({ value: 'abcdef1234' }))
+  on('session.cwd', () => ({ value: '/repo' }))
+  mock.env(on, { HOME: '/home/me' })
+  on('fs.write', () => ({ value: undefined }))
+  const handoff = 'Goal: ship the fix. '.repeat(12)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'clear', handoff })
+  await sendDuringReset($, running, release, 'both codes are 200')
+
+  expect(runs).toEqual(['/clear'])
+  expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
+  expect(submits[0]?.context?.join('\n')).toContain(handoff.trim())
 })
 
 const PANE = { title: 'Context', isFocused: false, bodyColumns: 40, placement: 'dock', scroll: { offset: 0, bodyRows: 60 }, view: {} } as const
