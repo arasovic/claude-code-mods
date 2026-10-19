@@ -21,6 +21,8 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.
 - The mod does not read quoted text as commands. So `grep -E "(export )?" file` runs.
+- A backslash in quotes is part of a search pattern, so `grep -rn '\.env' .` runs. Outside quotes it escapes the next character, so `cat \.env` is still blocked. A backslash separates directories only in a Windows path (`C:\…`, `\\server\…`).
+- Punctuation right after a file name is not part of it, so `git commit -m "copy .env.example, then edit"` runs. After `.` or `/` it stays, so `grep -r token ~/.ssh/.` is still blocked.
 - The mod treats a heredoc as data when `cat` or `tee` writes it out with a quoted delimiter, as in `cat > notes.py <<'EOF'`. It does not check that body. This holds only when the opener line has nothing but `&&` steps before it, and no `{`, `(` or `$(` is still open.
 - The mod checks every other heredoc body. `python3 - <<'EOF'` runs its body as code. A `<<EOF` body runs any `$(…)` in it. So a credential file name (`.env`) in such a body is blocked.
 - The mod does not read quotes in a heredoc body that runs. So a quoted `env` or `export` there is blocked, as in `grep -E "(export )?" f` in a `bash <<'EOF'` body, or `print('env')` in a `python3 <<'EOF'` body.
