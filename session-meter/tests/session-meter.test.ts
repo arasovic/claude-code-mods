@@ -163,13 +163,14 @@ type Hold = { at: 'queue' | 'compaction' | 'after' | 'resolved'; until: Promise<
 
 // A session at 80% context whose engine calls the reset path makes are recorded. A queued /compact or
 // /clear runs as the person's would. `running` settles once the reset waits at `hold`.
-const resetSession = ($: Engine, on: On, hold?: Hold, held?: Map<string, unknown>) => {
+const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unknown>()) => {
   mock.clock(on)
   const isReady = (key: string, value: unknown) => key === 'resume' && (value as MeterResume | null)?.ready === true && !(value as MeterResume).taken
   memoryState(on, held, (key, value) => (isReady(key, value) ? wait('resolved') : undefined))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
-  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  // As the host does, every plugin's $.state is emptied once the session.end hooks have run, a /clear's included.
+  on('session.end', (_$, e) => (held.clear(), { sessionId: e.sessionId }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const tools: string[] = []
   on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
@@ -263,7 +264,8 @@ test('a headless session the desktop attaches to gets the tool and compacts thro
 // The prompt the person sends while a reset runs, then the reset's end.
 const sendDuringReset = async ($: Engine, running: Promise<void>, release: () => void, text: string) => {
   const turn = $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
-  await running
+  // A reset that never reaches its hold sends the prompt after the turn, where the test's checks catch it.
+  await Promise.race([running, turn])
   await $.prompt.submit({ text, wait: false, origin: { kind: 'composer' } })
   release()
   await turn
@@ -341,22 +343,43 @@ test('a slash command sent during the compaction leaves the step to the continue
   expect(submits.map(p => p.text)).toEqual(['/model', ALONE])
 })
 
-test('a prompt dequeued once the /clear call resolves carries the handoff, and the handoff is not sent again', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
-  let release = () => {}
-  const { submits, running, runs } = resetSession($, on, { at: 'resolved', until: new Promise<void>(resolve => (release = resolve)) })
+const HANDOFF = 'Goal: ship the fix. '.repeat(12)
+
+// A desktop session the model clears: the handoff file is written, then the queued /clear runs.
+const startClear = async ($: Engine, on: On) => {
   on('session.id', () => ({ value: 'abcdef1234' }))
   on('session.cwd', () => ({ value: '/repo' }))
   mock.env(on, { HOME: '/home/me' })
   on('fs.write', () => ({ value: undefined }))
-  const handoff = 'Goal: ship the fix. '.repeat(12)
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'clear', handoff: HANDOFF })
+}
 
-  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
-  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'clear', handoff })
-  await sendDuringReset($, running, release, 'both codes are 200')
+test('in the desktop app a prompt dequeued once the /clear call resolves carries the handoff, though the clear emptied the state, and the handoff is not sent again', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const held = new Map<string, unknown>()
+  const { submits, running, runs } = resetSession($, on, { at: 'resolved', until: new Promise<void>(resolve => (release = resolve)) }, held)
+
+  await startClear($, on)
+  await sendDuringReset($, running, release, 'a note from a linked session')
 
   expect(runs).toEqual(['/clear'])
-  expect(submits.map(p => p.text)).toEqual(['both codes are 200'])
-  expect(submits[0]?.context?.join('\n')).toContain(handoff.trim())
+  expect(submits.map(p => p.text)).toEqual(['a note from a linked session'])
+  expect(submits[0]?.context?.join('\n')).toContain(HANDOFF.trim())
+  expect(held.get('resume')).toBeNull()
+})
+
+test('in the desktop app a prompt queued ahead of the /clear runs before it without the handoff, and the handoff still follows', { options: { contextAction: 'compact-or-clear', autoOpen: false } }, async ($, on) => {
+  let release = () => {}
+  const { submits, running } = resetSession($, on, { at: 'queue', until: new Promise<void>(resolve => (release = resolve)) })
+
+  await startClear($, on)
+  await sendDuringReset($, running, release, 'a note from a linked session')
+
+  expect(submits.map(p => p.text)).toHaveLength(2)
+  expect(submits[0]?.context?.join('\n') ?? '').not.toContain(HANDOFF.trim())
+  expect(submits[1]?.text).toContain(HANDOFF.trim())
 })
 
 test('a module reloaded after the reset still carries the step on the next prompt and drops its own continue', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
