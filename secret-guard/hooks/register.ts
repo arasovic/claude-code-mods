@@ -1,5 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { commandSegments, withoutDataHeredocs } from './shell-read'
+import { commandSegments, quotedWords, withoutDataHeredocs } from './shell-read'
 
 // Derived from gitleaks' default rules, loosened where key formats change.
 const SECRET_RULES: readonly [string, RegExp][] = [
@@ -64,6 +64,13 @@ export const scrubDeep = <T>(value: T, found: string[]): T => {
   return value
 }
 
+// Browser profiles, whose paths hold spaces (`Application Support`, `User Data`, `Login Data`). Local State holds the key
+// that decrypts Chromium's cookies and passwords.
+const BROWSER_PATHS: readonly RegExp[] = [
+  /\/library\/(application support|cookies)\/.*\/(login data|cookies|cookies\.sqlite|key4\.db|logins\.json)$/,
+  /\/(google-chrome[^/]*|chromium|chrome|brave-browser|bravesoftware|microsoft-edge[^/]*|edge|firefox|mozilla)\/.*\/(login data[^/]*|(extension )?cookies(-journal)?|web data(-journal)?|local state|vpn tokens(-journal)?|cookies\.sqlite(-shm|-wal)?|key4\.db|logins(-backup)?\.(json|db)|formhistory\.sqlite)$/,
+]
+
 // Matched against the lowercased path with forward slashes and a leading slash.
 const SENSITIVE_PATHS: readonly RegExp[] = [
   // `name.env` files, but not the code spellings a search names (`grep -rn process.env src`).
@@ -77,19 +84,20 @@ const SENSITIVE_PATHS: readonly RegExp[] = [
   /\/\.(npmrc|pypirc|netrc|git-credentials|pgpass|my\.cnf|s3cfg)$/, /\/_netrc$/,
   /\/\.(bash|zsh|sh|python|node_repl|psql|mysql|sqlite)_history$/, /\/\.zhistory$/, /\/fish_history$/,
   /\/\.aws\/(sso|cli)\/cache\//, /\/\.config\/gcloud\/(credentials\.db|access_tokens\.db|application_default_credentials\.json|legacy_credentials\/)/,
-  /\/\.azure\/(accesstokens\.json|msal_token_cache[^/]*)$/, /\/\.kube\/config$/, /\/\.docker\/config\.json$/,
+  /\/\.azure\/(accesstokens\.json|msal_token_cache[^/]*)$/, /\/\.kube\/config(-[^/]+)?$/, /\/\.docker\/config\.json$/,
   /\/\.config\/gh\/hosts\.yml$/, /\/\.config\/glab-cli\/config\.yml$/, /\/\.config\/rclone\/rclone\.conf$/,
   /\/\.gnupg\/[^/]+/, /\/\.terraform\.d\/credentials\.tfrc\.json$/,
   /\.tfstate(\.backup)?$/, /\/terraform\.tfvars(\.json)?$/, /\.auto\.tfvars(\.json)?$/,
   /\/\.claude\/\.credentials\.json$/, /\/\.codex\/auth\.json$/, /\/\.gemini\/oauth_creds\.json$/,
-  /\/library\/keychains\//, /\/library\/(application support|cookies)\/.*\/(login data|cookies|cookies\.sqlite|key4\.db|logins\.json)$/,
+  /\/library\/keychains\//, ...BROWSER_PATHS,
+  /\.kdbx$/, /\/\.password-store\//, /\/\.config\/(1password|bitwarden)\//, /\/\.(lastpass|bitwarden)\//,
   /\/proc\/[^/]+\/environ$/, /\/run\/secrets\//, /\/etc\/shadow$/, /\/etc\/ssh\/ssh_host_[^/]+_key$/,
 ]
 
-export const sensitivePath = (path: string, home: string): boolean => {
+export const sensitivePath = (path: string, home: string, rules = SENSITIVE_PATHS): boolean => {
   const expanded = path.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home)
   const p = ('/' + expanded.replace(/\\/g, '/')).replace(/\/+/g, '/').toLowerCase()
-  return SENSITIVE_PATHS.some(r => r.test(p))
+  return rules.some(r => r.test(p))
 }
 
 const SECRET_COMMANDS: readonly RegExp[] = [
@@ -121,6 +129,10 @@ export const secretCommand = (command: string, home: string): string | undefined
     const checked = cmd === 'cp' || cmd === 'mv' ? words.slice(1, -1) : words
     const token = checked.find(w => sensitivePath(w, home))
     if (token) return `${token} is a credential file`
+    // A quoted sentence ends like many paths (`-m "~/.ssh/config: add a host"`), so a whole quoted word is held only to
+    // the browser rules, the paths that need one.
+    const quotedPath = quotedWords(seg).find(word => sensitivePath(word, home, BROWSER_PATHS))
+    if (quotedPath) return `${quotedPath} is a credential file`
   }
   return undefined
 }

@@ -83,6 +83,30 @@ test('credential files are recognised, templates and public keys are not', () =>
     expect(sensitivePath(p, HOME)).toBe(false)
 })
 
+test('browser profiles, password managers and named kubeconfigs are credential files', () => {
+  for (const path of ['~/.config/google-chrome/Default/Cookies', '~/.config/google-chrome-beta/Default/Cookies',
+    '~/.config/microsoft-edge-dev/Default/Login Data', '~/.config/chromium/Default/Login Data For Account',
+    '/mnt/c/Users/me/AppData/Local/Microsoft/Edge/User Data/Default/Network/Cookies',
+    'C:\\Users\\me\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Login Data', '/mnt/c/Users/me/AppData/Local/Google/Chrome/User Data/Local State',
+    '/mnt/c/Users/me/AppData/Roaming/Mozilla/Firefox/Profiles/x.default/logins.json', '~/.mozilla/firefox/x.default/key4.db',
+    '~/vault.kdbx', '~/.password-store/github.gpg', '~/.config/Bitwarden/data.json', '~/.kube/config-prod'])
+    expect(sensitivePath(path, HOME)).toBe(true)
+  for (const path of ['src/chrome/cookies.ts', 'extension/chrome/manifest.json', 'docs/firefox/logins.md', '~/.kube/cache/discovery', 'src/edge/web data.ts'])
+    expect(sensitivePath(path, HOME)).toBe(false)
+})
+
+test('a quoted browser path with spaces is read as one path, a quoted sentence is not', () => {
+  for (const command of ['cat "/mnt/c/Users/me/AppData/Local/Microsoft/Edge/User Data/Default/Login Data"',
+    "sqlite3 '/Users/me/Library/Application Support/Google/Chrome/Default/Web Data' 'select * from autofill'",
+    'cat "C:/Users/me/AppData/Local/Google/Chrome/User Data/Local State"', 'cat "$LOCALAPPDATA/Google/Chrome/User Data/Local State"',
+    'cd /mnt/c/Users/me && cat "AppData/Local/Google/Chrome/User Data/Default/Login Data"',
+    'bash -c "cat \'/mnt/c/Users/me/AppData/Local/Microsoft/Edge/User Data/Default/Login Data\'"'])
+    expect(secretCommand(command, HOME)).toBeDefined()
+  for (const command of ['grep -n "Login Data" notes.md', 'echo "--- compose/.env.example diff:"', 'git commit -m "./src: read the port from process.env"',
+    'echo "./compose/.env.example updated"'])
+    expect(secretCommand(command, HOME)).toBeUndefined()
+})
+
 test('commands that read credential files or print secrets are caught', () => {
   for (const c of ['cat .env', 'grep KEY .dev.vars', 'printenv', 'env', 'export', 'gh auth token', 'cd x && security find-generic-password -s y -w',
     'aws configure get aws_secret_access_key', 'echo $OPENAI_API_KEY', 'tail -n 5 ~/.zsh_history', 'cp .env /tmp/x', 'mv .dev.vars notes.txt',
