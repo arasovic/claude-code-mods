@@ -256,8 +256,8 @@ test('a headless session the desktop attaches to gets the tool and compacts thro
 
   await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
   await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
-  expect(compacts).toEqual(['The work continues with: run the tests'])
-  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(compacts).toEqual([undefined])
+  expect(runs).toEqual(['/compact'])
   expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
 })
 
@@ -294,7 +294,7 @@ test('in the desktop app a prompt queued ahead of the /compact runs before it wi
   await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact', next: 'run the tests' })
   await sendDuringReset($, running, release, 'a note from a linked session')
 
-  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(runs).toEqual(['/compact'])
   expect(submits.map(p => p.text)).toEqual(['a note from a linked session', ALONE])
   expect(submits[0]?.context?.join('\n') ?? '').not.toContain('run the tests')
 })
@@ -322,7 +322,7 @@ test('in the desktop app a prompt dequeued once the /compact call resolves carri
   await sendDuringReset($, running, release, 'both codes are 200')
   await $.prompt.submit({ text: 'and now?', wait: false, origin: { kind: 'composer' } })
 
-  expect(runs).toEqual(['/compact The work continues with: run the tests'])
+  expect(runs).toEqual(['/compact'])
   expect(submits.map(p => p.text)).toEqual(['both codes are 200', 'and now?'])
   expect(submits[0]?.context?.join('\n')).toContain('Its next step was: run the tests')
   expect(submits[1]?.context?.join('\n') ?? '').not.toContain('run the tests')

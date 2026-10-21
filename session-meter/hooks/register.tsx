@@ -422,9 +422,11 @@ export const register: Register = (on, options) => {
           await update($, resume, () => armed)
         }
         // A queued /compact reports no veto, so only the REPL's direct call can come back skipped.
+        // It runs bare: its arguments would stay in the conversation, shown and sent beside the Continue that
+        // already carries the step, and the summarizer sees the step in the context_reset call anyway.
         let skip: string | undefined
         if (isRepl) skip = (await $.session.compact(instructions === undefined ? undefined : { instructions })).skip
-        else await $.command.run({ command: 'compact', args: instructions ?? '' })
+        else await $.command.run({ command: 'compact' })
         if (skip !== undefined) {
           await update($, resume, () => null)
           $.ui.toast(`session-meter: compaction skipped: ${skip}`)
