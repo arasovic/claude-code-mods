@@ -124,3 +124,20 @@ export const withoutDataHeredocs = (command: string): string => {
   }
   return kept.join('\n')
 }
+
+const SHELL_WORD = /(?:[^\s'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")+/g
+const QUOTED_PART = /'([^']*)'|"((?:[^"\\]|\\[\s\S])*)"/g
+
+// The shell words whose quotes hold whitespace, quotes removed, as one string each: `"User Data/Default/Login Data"` is
+// one path, which a split on whitespace breaks up. A quoted command (`bash -c "cat 'a b/Login Data'"`) is read again for
+// its own words.
+export const quotedWords = (segment: string): string[] => {
+  const words: string[] = []
+  for (const token of segment.match(SHELL_WORD) ?? []) {
+    if (!/['"]/.test(token)) continue
+    const word = token.replace(QUOTED_PART, (_, single, double) => single ?? double)
+    if (/\s/.test(word)) words.push(word)
+    for (const [, single, double] of token.matchAll(QUOTED_PART)) words.push(...quotedWords(single ?? double ?? ''))
+  }
+  return words
+}
