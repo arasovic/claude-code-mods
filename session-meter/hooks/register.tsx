@@ -375,7 +375,7 @@ export const register: Register = (on, options) => {
         prompt = { ...e, context: [...(e.context ?? []), r.carried] }
         return { ...r, taken: true as const }
       })
-    if (isDropped) return { drop: 'session-meter: the message before it carried the next step' }
+    if (isDropped) return { drop: 'session-meter: an earlier message already carried the next step; skipped this copy' }
     const r = await read($, reading)
     const crossed = cross(r, await read($, fired), thresholds)
     await update($, fired, () => crossed.fired)
