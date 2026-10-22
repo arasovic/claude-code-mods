@@ -141,8 +141,12 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
     seen.push(e.context)
     return { text: e.text, context: e.context }
   })
-  const measure = (fiveHour: number) =>
-    $.session.measure({ context: { window: 200_000, percent: 20 }, rateLimits: [{ kind: 'five_hour', percentUsed: fiveHour }], changed: ['rateLimits'] })
+  let rateLimits = [{ kind: 'five_hour', percentUsed: 0 }]
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 20 }, rateLimits } }))
+  const measure = (fiveHour: number) => {
+    rateLimits = [{ kind: 'five_hour', percentUsed: fiveHour }]
+    return $.session.measure({ context: { window: 200_000, percent: 20 }, rateLimits, changed: ['rateLimits'] })
+  }
   const submit = () => $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })
 
   await measure(50)
@@ -174,7 +178,8 @@ const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unk
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const tools: string[] = []
   on('tool.register', (_$, e) => (tools.push(e.name), { value: { tool: e.name } }))
-  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: 80 }, rateLimits: [] } }))
+  const fill = { percent: 80 }
+  on('session.usage', () => ({ value: { startedAt: 0, context: { window: 200_000, percent: fill.percent }, rateLimits: [] } }))
   let begin = () => {}
   const running = new Promise<void>(resolve => (begin = resolve))
   const wait = async (at: Hold['at']) => {
@@ -202,7 +207,7 @@ const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unk
     await wait('after')
     return { text: '' }
   })
-  return { tools, compacts, submits, toasts, runs, running }
+  return { tools, compacts, submits, toasts, runs, running, fill }
 }
 
 test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
@@ -231,6 +236,21 @@ test('a compact with next submits it as the next prompt, and one without next wa
   expect(compacts).toEqual(['The work continues with: run the tests', undefined])
   expect(submits).toHaveLength(1)
   expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
+})
+
+test('the first prompt after a compaction is noted by a fresh measure, not the reading from before it', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { submits, fill } = resetSession($, on)
+
+  // The model reaches the threshold mid-turn and resets before any prompt has noted it.
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  await $.tool.call({ tool: 'mcp__session-meter__context_reset', mode: 'compact' })
+  await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  // What the compaction left; no turn has ended since, so nothing has measured it yet.
+  fill.percent = 30
+  await $.prompt.submit({ text: 'and now?', wait: false, origin: { kind: 'composer' } })
+
+  expect(submits.map(p => p.text)).toEqual(['and now?'])
+  expect(submits[0]?.context?.join('\n') ?? '').not.toContain('context window is')
 })
 
 test('a headless session gets no context_reset tool and the suggest note', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {

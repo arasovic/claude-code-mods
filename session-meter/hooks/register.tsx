@@ -357,6 +357,9 @@ export const register: Register = (on, options) => {
   })
 
   on('prompt.submit', async ($, e, next) => {
+    // Nothing measures between a compaction and the prompt after it, so the stored reading can still be the full
+    // window from before it. Measured first: a measure that throws skips the whole hook before a prompt takes the step.
+    await refresh($)
     // Queued prompts are dequeued one at a time, each once the session is idle, so these awaits keep their order.
     // A meta prompt takes no context and a slash command may not reach the model, so both leave it to the
     // separate prompt.
