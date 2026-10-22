@@ -47,6 +47,24 @@ How this differs from Claude Code's own auto-compact:
 
 Auto-compact stays on. The mod only resets earlier, at a moment the model chooses.
 
+### Idle compaction
+
+Claude Code can also compact a long conversation on its own while the session is idle, before the one-hour prompt cache expires. The transcript then shows "Compacted while idle, before the prompt cache expired". Anthropic turns this on from its side; no setting turns it on.
+
+Idle compaction does not know about `contextAction`, and the two can overlap:
+
+- It does not wait for `contextAt` or for a natural break. It can compact between two steps of a task you paused, and it sends no next step.
+- After the mod compacts, a conversation that is still long can be compacted again while you are away, so more detail is lost.
+- If an idle compaction leaves the context below `contextAt`, `context_reset` refuses until the context fills again.
+
+To leave resets to the model and to the built-in auto-compact, turn idle compaction off in `~/.claude/settings.json`:
+
+```json
+{ "idleCompaction": false }
+```
+
+Setting it to `true` does not turn it on. Checked in Claude Code 2.1.300.
+
 ## Install
 
 ```sh
