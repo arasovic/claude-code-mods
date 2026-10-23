@@ -251,7 +251,7 @@ const resetSpec = (action: ContextAction) => {
       ...(canClear
         ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
         : []),
-      'After calling it, end your turn with one short line.',
+      'Write your whole reply as visible text before the call, including any question or choice you put to the user: text in your thinking never reaches them. After the call, end your turn with one short line.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -397,7 +397,7 @@ export const register: Register = (on, options) => {
     if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
     if (typeof reset === 'string') return { isError: true as const, result: reset }
     await update($, pending, () => reset)
-    return { result: `The ${reset.mode} runs when this turn ends. End your turn now with one short line.` }
+    return { result: `The ${reset.mode} runs when this turn ends. If your visible reply left out anything you meant to tell the user, write it now. Then end your turn with one short line.` }
   })
 
   on('turn.complete', async ($, e, next) => {
