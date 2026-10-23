@@ -259,7 +259,7 @@ test('a compact with next submits it as the next prompt, and one without next or
   expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
 })
 
-test('a compact that hands the turn back is refused until the turn has shown the person text, since thinking never reaches them', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+test('a compact that hands the turn back is refused until the turn has shown the person text, since thinking cannot carry a reply', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   const { compacts, step } = resetSession($, on)
   const end = () => $.turn.complete({ answer: '', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
@@ -267,7 +267,8 @@ test('a compact that hands the turn back is refused until the turn has shown the
   step.text = ''
   const refused = await callReset($, { mode: 'compact' })
   expect(refused.isError).toBe(true)
-  expect(String(refused.result)).toContain('never your thinking')
+  expect(String(refused.result)).toContain('Your reply is in a `thinking` block')
+  expect(String(refused.result)).toContain('call context_reset again in this same turn')
   await end()
   expect(compacts).toEqual([])
 

@@ -252,7 +252,7 @@ const resetSpec = (action: ContextAction) => {
       ...(canClear
         ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
         : []),
-      'Write your whole reply as visible text before the call, including any question or choice you put to the user: text in your thinking never reaches them. After the call, end your turn with one short line.',
+      'Write your whole reply as a `text` block before the call, including any question or choice you put to the user: a `thinking` block is hidden or summarized, so it cannot carry a reply. After the call, end your turn with one short line.',
     ].join(' '),
     inputSchema: {
       type: 'object',
@@ -320,7 +320,7 @@ export const register: Register = (on, options) => {
   // Only the REPL can compact from a hook; a headless host compacts through a queued /compact.
   let isRepl = false
   // Whether this main turn has shown the person any text. A model can put its whole reply in thinking, which
-  // never reaches them, and then reset; an instruction alone did not stop that (0.4.19). Checked only on a compact
+  // is hidden or summarized, and then reset; an instruction alone did not stop that (0.4.19). Checked only on a compact
   // that waits (no `next`, or `wait`), which hands the turn to the person; a reset with a next step goes on alone.
   // ponytail: any text counts, a one-line progress note too; compare against the reply if that slips through.
   let isTextShown = false
@@ -410,7 +410,7 @@ export const register: Register = (on, options) => {
     if (reset.mode === 'compact' && (reset.wait || !reset.next) && !isTextShown)
       return {
         isError: true as const,
-        result: 'Nothing you wrote this turn has reached the user: they see text, never your thinking. Write your reply as text first (the answer, any table, any question), then call context_reset again.',
+        result: 'Refused on purpose, not a miscount: this turn has no `text` block yet. Your reply is in a `thinking` block, and thinking is hidden or summarized, so it cannot carry a reply. Write the reply now as a `text` block (the answer, any table, any question), then call context_reset again in this same turn. Do not end your turn here, and do not tell the user the compaction failed.',
       }
     await update($, pending, () => reset)
     return { result: `The ${reset.mode} runs when this turn ends. If your visible reply left out anything you meant to tell the user, write it now. Then end your turn with one short line.` }
