@@ -1,5 +1,5 @@
 import { expect, mock, test, type Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, RenderSurface } from 'claude-code'
 
 import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
 import type { MeterResume } from '../types'
@@ -179,6 +179,8 @@ const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unk
   memoryState(on, held, (key, value) => (isReady(key, value) ? wait('resolved') : undefined))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
+  const surfaces: RenderSurface[] = []
+  on('session.surfaces', () => ({ value: surfaces }))
   // As the host does, every plugin's $.state is emptied once the session.end hooks have run, a /clear's included.
   on('session.end', (_$, e) => (held.clear(), { sessionId: e.sessionId }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -218,7 +220,7 @@ const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unk
     await wait('after')
     return { text: '' }
   })
-  return { tools, compacts, submits, toasts, runs, running, fill, step }
+  return { tools, compacts, submits, toasts, runs, running, fill, step, surfaces }
 }
 
 test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
@@ -320,6 +322,18 @@ test('a headless session the desktop attaches to gets the tool and compacts thro
   expect(compacts).toEqual([undefined])
   expect(runs).toEqual(['/compact'])
   expect(submits.map(p => p.text)).toEqual(['session-meter compacted the conversation. Continue: run the tests'])
+})
+
+test('a module reloaded in a session the desktop already attached to keeps the tool and the compact note', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  // An options change reloads the module: session.start runs again, while the desktop, attached before, raises no attach.
+  const { tools, submits, surfaces } = resetSession($, on)
+  surfaces.push('desktop')
+
+  await $.session.start({ cwd: '/repo', surface: 'desktop', isInteractive: false })
+  await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })
+
+  expect(tools).toEqual(['context_reset'])
+  expect(submits[0]?.context?.join('\n') ?? '').toContain('call the context_reset tool yourself')
 })
 
 // The prompt the person sends while a reset runs, then the reset's end.
