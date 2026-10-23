@@ -317,6 +317,11 @@ export const register: Register = (on, options) => {
   let live: ContextAction = 'suggest'
   // Only the REPL can compact from a hook; a headless host compacts through a queued /compact.
   let isRepl = false
+  // Whether this main turn has shown the person any text. A model can put its whole reply in thinking, which
+  // never reaches them, and then reset; an instruction alone did not stop that (0.4.19). Checked only on a compact
+  // without `next`, which hands the turn to the person; a reset with a next step goes on alone.
+  // ponytail: any text counts, a one-line progress note too; compare against the reply if that slips through.
+  let isTextShown = false
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
@@ -396,6 +401,11 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return { isError: true as const, result: 'Only the main conversation can reset its context.' }
     if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
     if (typeof reset === 'string') return { isError: true as const, result: reset }
+    if (reset.mode === 'compact' && !reset.next && !isTextShown)
+      return {
+        isError: true as const,
+        result: 'Nothing you wrote this turn has reached the user: they see text, never your thinking. Write your reply as text first (the answer, any table, any question), then call context_reset again.',
+      }
     await update($, pending, () => reset)
     return { result: `The ${reset.mode} runs when this turn ends. If your visible reply left out anything you meant to tell the user, write it now. Then end your turn with one short line.` }
   })
@@ -475,7 +485,15 @@ export const register: Register = (on, options) => {
 
   on('turn.step', async function* ($, e, next) {
     const at = await $.clock.now()
-    const result = yield* next(e)
+    const isMain = e.agentId === undefined
+    if (isMain && e.index === 0) isTextShown = false
+    const stream = next(e)
+    // Read per chunk, not from the result: the engine can start a tool call before the step's result returns.
+    for await (const chunk of stream) {
+      if (isMain && chunk.kind === 'text' && chunk.text.trim()) isTextShown = true
+      yield chunk
+    }
+    const result = await stream.result
     const usage = result.usage
     if (usage) {
       try {
