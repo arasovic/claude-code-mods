@@ -52,6 +52,8 @@ test('checkReset takes an optional next for a compact and needs a full handoff f
   expect(checkReset({ mode: 'compact', next: ' run the tests ' }, 'compact')).toEqual({ mode: 'compact', next: 'run the tests' })
   expect(checkReset({ mode: 'compact' }, 'compact')).toEqual({ mode: 'compact' })
   expect(checkReset({ mode: 'compact', next: '  ' }, 'compact')).toEqual({ mode: 'compact' })
+  expect(checkReset({ mode: 'compact', next: 'the user picks A or B', wait: true }, 'compact')).toEqual({ mode: 'compact', next: 'the user picks A or B', wait: true })
+  expect(checkReset({ mode: 'compact', wait: true }, 'compact')).toEqual({ mode: 'compact' })
   expect(checkReset({ mode: 'clear', handoff }, 'compact')).toBe('mode must be "compact".')
   expect(checkReset({ mode: 'clear', handoff: 'do the rest' }, 'compact-or-clear')).toContain('at least 200 characters')
   expect(checkReset({ mode: 'clear', handoff }, 'compact-or-clear')).toEqual({ mode: 'clear', handoff })
@@ -166,7 +168,7 @@ test('prompt.submit attaches the note only on the turn a level is crossed', asyn
 type Hold = { at: 'queue' | 'compaction' | 'after' | 'resolved'; until: Promise<void> }
 
 // The model's first step of a turn, then its context_reset call: the step shows the person `step.text`.
-const callReset = async ($: Engine, input: Record<string, string>, index = 0) => {
+const callReset = async ($: Engine, input: Record<string, unknown>, index = 0) => {
   for await (const chunk of $.turn.step({ turnId: 't', index, model: 'opus', messageCount: 2 })) void chunk
   return $.tool.call({ tool: 'mcp__session-meter__context_reset', ...input })
 }
@@ -223,7 +225,7 @@ const resetSession = ($: Engine, on: On, hold?: Hold, held = new Map<string, unk
   return { tools, compacts, submits, toasts, runs, running, fill, step, surfaces }
 }
 
-test('a compact with next submits it as the next prompt, and one without next waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+test('a compact with next submits it as the next prompt, and one without next or with wait waits for the user', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
   // The REPL's direct compaction readies the step once it resolves.
   const resumes: unknown[] = []
   const held = new (class extends Map<string, unknown> {
@@ -233,7 +235,7 @@ test('a compact with next submits it as the next prompt, and one without next wa
     }
   })()
   const { tools, compacts, submits, toasts } = resetSession($, on, undefined, held)
-  const reset = async (input: Record<string, string>) => {
+  const reset = async (input: Record<string, unknown>) => {
     await callReset($, input)
     await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
   }
@@ -247,6 +249,12 @@ test('a compact with next submits it as the next prompt, and one without next wa
 
   await reset({ mode: 'compact' })
   expect(compacts).toEqual(['The work continues with: run the tests', undefined])
+  expect(submits).toHaveLength(1)
+  expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
+
+  // With wait, next steers the summary as a note, not as a step to continue with.
+  await reset({ mode: 'compact', next: 'the user picks A or B', wait: true })
+  expect(compacts.at(-1)).toBe("Keep in mind for the user's next message: the user picks A or B")
   expect(submits).toHaveLength(1)
   expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
 })
@@ -277,8 +285,32 @@ test('a compact that hands the turn back is refused until the turn has shown the
   // The next turn starts unshown again.
   step.text = ' \n'
   expect((await callReset($, { mode: 'compact' })).isError).toBe(true)
+  // A next step given with wait is only a note: the turn is still the person's.
+  expect((await callReset($, { mode: 'compact', next: 'the user picks A or B', wait: true })).isError).toBe(true)
   // A compact with a next step goes on alone, so it needs no text.
   expect((await callReset($, { mode: 'compact', next: 'run the tests' })).isError).toBeUndefined()
+})
+
+test('in the desktop app a compact that waits sends no prompt, and its next goes only with the user\'s next message', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const held = new Map<string, unknown>()
+  const { submits, runs, toasts } = resetSession($, on, undefined, held)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect((await callReset($, { mode: 'compact', next: 'Branch fix/x holds the change; the user picks A or B', wait: true })).isError).toBeUndefined()
+  await $.turn.complete({ answer: 'ok', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
+  expect(runs).toEqual(['/compact'])
+  expect(submits).toEqual([])
+  expect(toasts.at(-1)).toBe('session-meter: compacted; waiting for you')
+
+  await $.prompt.submit({ text: 'A', wait: false, origin: { kind: 'composer' } })
+  await $.prompt.submit({ text: 'and now?', wait: false, origin: { kind: 'composer' } })
+  expect(submits.map(p => p.text)).toEqual(['A', 'and now?'])
+  const carried = submits[0]?.context?.join('\n') ?? ''
+  expect(carried).toContain('Branch fix/x holds the change; the user picks A or B')
+  expect(carried).not.toContain('go on with that step')
+  expect(submits[1]?.context?.join('\n') ?? '').not.toContain('fix/x')
+  expect(held.get('resume')).toBeNull()
 })
 
 test('the first prompt after a compaction is noted by a fresh measure, not the reading from before it', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
