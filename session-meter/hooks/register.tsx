@@ -326,7 +326,10 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'ctx', description: 'Show what fills the context window and how fast limits run down' })
     isRepl = e.isInteractive
-    if (isRepl && live !== action) {
+    // An options change reloads this module and runs session.start again, but an app attached before raises no
+    // session.attach, so the reload reads the roster itself. At the app's first start the roster is still empty.
+    const isAttached = !isRepl && (await $.session.surfaces()).some(s => s !== 'terminal')
+    if ((isRepl || isAttached) && live !== action) {
       live = action
       await $.tool.register(resetSpec(live))
     }
