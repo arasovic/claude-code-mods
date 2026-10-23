@@ -52,6 +52,7 @@ const pending = atom({ plugin: 'session-meter', key: 'pending' } as const, null 
 // What the model reads once a reset ends, sent as a prompt of its own. A prompt sent while the reset ran is dequeued
 // ahead of that one, so it carries the text instead and the separate prompt is dropped when its turn comes. It is
 // `ready` only once the reset call has resolved; a prompt dequeued before that leaves the step to the separate prompt.
+// A compact that waits has no separate prompt, so its text goes only with the next prompt the user sends.
 const resume = atom({ plugin: 'session-meter', key: 'resume' } as const, null as MeterResume | null)
 
 // Subagent ids never change type, so one lookup per id is enough.
@@ -233,7 +234,7 @@ export type Reset = MeterReset
 export const checkReset = (input: Record<string, unknown>, action: ContextAction): Reset | string => {
   const next = typeof input.next === 'string' ? input.next.trim() : ''
   const handoff = typeof input.handoff === 'string' ? input.handoff.trim() : ''
-  if (input.mode === 'compact') return next ? { mode: 'compact', next } : { mode: 'compact' }
+  if (input.mode === 'compact') return next ? { mode: 'compact', next, ...(input.wait === true ? { wait: true as const } : {}) } : { mode: 'compact' }
   if (input.mode !== 'clear' || action !== 'compact-or-clear') return `mode must be ${action === 'compact-or-clear' ? '"compact" or "clear"' : '"compact"'}.`
   if (handoff.length < HANDOFF_MIN)
     return `A clear needs a \`handoff\` of at least ${HANDOFF_MIN} characters: the new session sees nothing else. Give the goal, what is done, the decisions taken, the files that matter and the next step.`
@@ -246,7 +247,7 @@ const resetSpec = (action: ContextAction) => {
     name: RESET,
     description: [
       'Compacts this conversation after your turn ends, then sends `next` back to you as a new prompt, so the work goes on without the user.',
-      'Omit `next` when the next step is the user\'s, such as a decision or an answer: the compaction then runs and waits for the user.',
+      'Set `wait` to true when the next step is the user\'s, such as a decision or an answer: the compaction then runs and waits for the user, and `next`, if given, is what to remember; it reaches you with the user\'s next message.',
       'Call it yourself, without asking, once session-meter has said the context is full and you reach a natural break: a step is done and nothing is half-edited. Never call it in the middle of a step.',
       ...(canClear
         ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
@@ -257,7 +258,8 @@ const resetSpec = (action: ContextAction) => {
       type: 'object',
       properties: {
         mode: { type: 'string', enum: canClear ? ['compact', 'clear'] : ['compact'] },
-        next: { type: 'string', description: 'For compact: the step the work continues with. Omit it when the next step is the user\'s.' },
+        next: { type: 'string', description: 'For compact: the step the work continues with. With `wait`: what to remember until the user\'s next message.' },
+        wait: { type: 'boolean', description: 'For compact: true when the next step is the user\'s. No prompt is sent; the compaction waits for them.' },
         ...(canClear ? { handoff: { type: 'string', description: 'For clear: everything the new session needs, in full.' } } : {}),
       },
       required: ['mode'],
@@ -319,7 +321,7 @@ export const register: Register = (on, options) => {
   let isRepl = false
   // Whether this main turn has shown the person any text. A model can put its whole reply in thinking, which
   // never reaches them, and then reset; an instruction alone did not stop that (0.4.19). Checked only on a compact
-  // without `next`, which hands the turn to the person; a reset with a next step goes on alone.
+  // that waits (no `next`, or `wait`), which hands the turn to the person; a reset with a next step goes on alone.
   // ponytail: any text counts, a one-line progress note too; compare against the reply if that slips through.
   let isTextShown = false
 
@@ -384,7 +386,8 @@ export const register: Register = (on, options) => {
         }
         if (!r.ready || r.taken || e.isMeta || e.command) return r
         prompt = { ...e, context: [...(e.context ?? []), r.carried] }
-        return { ...r, taken: true as const }
+        // With no separate prompt of its own to drop later, the carried text is done.
+        return r.alone === undefined ? null : { ...r, taken: true as const }
       })
     if (isDropped) return { drop: 'session-meter: an earlier message already carried the next step; skipped this copy' }
     const r = await read($, reading)
@@ -404,7 +407,7 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return { isError: true as const, result: 'Only the main conversation can reset its context.' }
     if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
     if (typeof reset === 'string') return { isError: true as const, result: reset }
-    if (reset.mode === 'compact' && !reset.next && !isTextShown)
+    if (reset.mode === 'compact' && (reset.wait || !reset.next) && !isTextShown)
       return {
         isError: true as const,
         result: 'Nothing you wrote this turn has reached the user: they see text, never your thinking. Write your reply as text first (the answer, any table, any question), then call context_reset again.',
@@ -427,9 +430,14 @@ export const register: Register = (on, options) => {
     let alone: string | undefined
     try {
       if (job.mode === 'compact') {
-        $.ui.toast(job.next ? 'session-meter: compacting, then continuing' : 'session-meter: compacting')
-        const instructions = job.next ? `The work continues with: ${job.next}` : undefined
-        if (job.next) {
+        const isWaiting = job.wait || !job.next
+        $.ui.toast(isWaiting ? 'session-meter: compacting' : 'session-meter: compacting, then continuing')
+        const instructions = !job.next ? undefined : job.wait ? `Keep in mind for the user's next message: ${job.next}` : `The work continues with: ${job.next}`
+        // A compact that waits sends no prompt of its own: its notes go only with the user's next message.
+        if (job.next && job.wait) {
+          const carried = `session-meter compacted the conversation just before this message. You asked to remember: ${job.next}`
+          await update($, resume, () => ({ carried }))
+        } else if (job.next) {
           const armed = {
             alone: `session-meter compacted the conversation. Continue: ${job.next}`,
             carried: `session-meter compacted the conversation just before this message. Its next step was: ${job.next}\nHandle this message first, then go on with that step if it still applies.`,
@@ -448,7 +456,7 @@ export const register: Register = (on, options) => {
           $.ui.toast(`session-meter: compaction skipped: ${skip}`)
           return result
         }
-        if (!job.next) $.ui.toast('session-meter: compacted; waiting for you')
+        if (isWaiting) $.ui.toast('session-meter: compacted; waiting for you')
       } else {
         saved = await saveHandoff($, job.handoff)
         $.ui.toast(`session-meter: clearing; handoff saved to ${saved}`)
