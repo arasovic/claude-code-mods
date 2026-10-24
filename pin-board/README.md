@@ -25,6 +25,7 @@ If that band is already busy, set **Where pins show** to `counter` in `/config`.
 
 - When you pin or unpin, the command leaves Claude a note at once, so the change counts from your next message.
 - The whole list is also part of the system prompt. Claude Code builds the system prompt again at the start of a session, after `/compact` and after `/clear`, so the pins are there each time without being sent with every message.
+- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. It keeps the list out of the system prompt. The mod then sends the list with your first message, and again with the first message after a compaction or `/clear`.
 
 ## Limits
 
