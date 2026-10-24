@@ -102,10 +102,14 @@ test('only --keep pins come back on the next start, with a toast', async ($, on)
   expect(await s.list()).toContain('No pins.')
 })
 
-// The engine's prompts and the conversation's first row, which a compaction replaces.
+// The engine's prompts and the request's first message, which a compaction replaces; the rows form keeps the old one.
 function prompts(...[$, on]: Parameters<TestBody>) {
   let first = 'hello'
-  on('session.messages', () => ({ value: [{ role: 'user' as const, text: first, toolUses: [] }] }))
+  on('session.messages', (_$, e) =>
+    e.as === 'api'
+      ? { value: [{ role: 'user' as const, content: [{ type: 'text', text: first }] }] }
+      : { value: [{ role: 'user' as const, text: 'hello', toolUses: [] }] },
+  )
   on('prompt.submit', (_$, e) => ({ text: e.text, context: e.context }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   const submit = async () => (await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })).context ?? []
