@@ -93,13 +93,15 @@ const SENSITIVE_PATHS: readonly RegExp[] = [
   /\/id_(rsa|dsa|ecdsa|ed25519)(_sk)?$/,
   /\/\.ssh\/(?!(known_hosts[^/]*|config|authorized_keys|[^/]+\.pub)$)[^/]+$/,
   /\/\.(npmrc|pypirc|netrc|git-credentials|pgpass|my\.cnf|s3cfg)$/, /\/_netrc$/,
-  /\/\.(bash|zsh|sh|python|node_repl|psql|mysql|sqlite)_history$/, /\/\.zhistory$/, /\/fish_history$/,
+  /\/\.(bash|zsh|sh|python|node_repl|psql|mysql|sqlite|rediscli)_history$/, /\/\.zhistory$/, /\/fish_history$/, /\/\.zsh_sessions\/[^/]+\.history(new)?$/,
   /\/\.aws\/(sso|cli)\/cache\//, /\/\.config\/gcloud\/(credentials\.db|access_tokens\.db|application_default_credentials\.json|legacy_credentials\/)/,
   /\/\.azure\/(accesstokens\.json|msal_token_cache[^/]*)$/, /\/\.kube\/config(-[^/]+)?$/, /\/\.docker\/config\.json$/,
   /\/\.config\/gh\/hosts\.yml$/, /\/\.config\/glab-cli\/config\.yml$/, /\/\.config\/rclone\/rclone\.conf$/,
   /\/\.gnupg\/[^/]+/, /\/\.terraform\.d\/credentials\.tfrc\.json$/,
   /\.tfstate(\.backup)?$/, /\/terraform\.tfvars(\.json)?$/, /\.auto\.tfvars(\.json)?$/,
-  /\/\.claude\/\.credentials\.json$/, /\/\.codex\/auth\.json$/, /\/\.gemini\/oauth_creds\.json$/,
+  // Coding agents keep their logins in an auth.json under a dot folder (`~/.codex`, `~/.pi/agent`).
+  /\/\.claude\/\.credentials\.json$/, /\/\.[^/]+\/(?:[^/]+\/)*auth\.json$/, /\/\.gemini\/oauth_creds\.json$/,
+  /\/\.wrangler\/config\/default\.toml$/, /\/\.config\/github-copilot\/(apps|hosts)\.json$/,
   /\/library\/keychains\//, ...SPACED_PATHS,
   // A vault folder counts as a whole, so `tar` or `cp -r` of it is caught.
   /\.kdbx$/, /\/(\.password-store|\.config\/(1password|bitwarden)|\.(lastpass|bitwarden)|\.var\/app\/com\.bitwarden\.desktop)(\/|$)/,

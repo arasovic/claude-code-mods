@@ -103,6 +103,15 @@ test('browser profiles, password managers and named kubeconfigs are credential f
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
+test('agent logins, wrangler and Copilot tokens, zsh session history and redis-cli history are credential files', () => {
+  for (const path of ['~/.codex/auth.json', '~/.pi/agent/auth.json', '~/.hermes/auth.json', '~/.wrangler/config/default.toml',
+    '~/Library/Preferences/.wrangler/config/default.toml', '~/.config/github-copilot/apps.json', '~/.config/github-copilot/hosts.json',
+    '~/.zsh_sessions/A1B2.history', '~/.zsh_sessions/A1B2.historynew', '~/.rediscli_history'])
+    expect(sensitivePath(path, HOME)).toBe(true)
+  for (const path of ['src/auth.json', 'app/routes/auth.json', '~/.zsh_sessions/A1B2.session', '~/.config/github-copilot/versions.json', 'wrangler.toml'])
+    expect(sensitivePath(path, HOME)).toBe(false)
+})
+
 test('a quoted browser path with spaces is read as one path, a quoted sentence is not', () => {
   for (const command of ['cat "/mnt/c/Users/me/AppData/Local/Microsoft/Edge/User Data/Default/Login Data"',
     "sqlite3 '/Users/me/Library/Application Support/Google/Chrome/Default/Web Data' 'select * from autofill'",
