@@ -191,7 +191,8 @@ export const register: Register = on => {
     return { result, context: ran.context }
   })
 
-  // Every other row: prompts the person pastes, model output, attachments, compaction summaries, error results.
+  // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
+  // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries and Skill messages past this hook.
   on('session.append', ($, e, next) => {
     const found: string[] = []
     const content = scrubDeep(e.message.content, found)
