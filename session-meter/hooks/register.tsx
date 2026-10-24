@@ -323,6 +323,7 @@ export const register: Register = (on, options) => {
   // is hidden or summarized, and then reset; an instruction alone did not stop that (0.4.19). Checked only on a compact
   // that waits (no `next`, or `wait`), which hands the turn to the person; a reset with a next step goes on alone.
   // ponytail: any text counts, a one-line progress note too; compare against the reply if that slips through.
+  // A reload of this module mid-turn resets it, which can only refuse wrongly: the refused reset still runs at the end.
   let isTextShown = false
 
   on('session.start', async ($, e, next) => {
@@ -409,7 +410,7 @@ export const register: Register = (on, options) => {
     if (typeof reset === 'string') return { isError: true as const, result: reset }
     if (reset.mode === 'compact' && (reset.wait || !reset.next) && !isTextShown) {
       // Told to write text and call again, a model kept writing the reply as thinking before each call (0.4.23): it
-      // wrote text only in a message with no tool call. So the reset is kept and runs if the turn ends showing text.
+      // wrote text only in a message with no tool call. So the reset is kept and runs if the turn's last message shows text.
       await update($, pending, () => ({ ...reset, needsText: true as const }))
       return {
         isError: true as const,
@@ -428,8 +429,9 @@ export const register: Register = (on, options) => {
     await update($, pending, () => null)
     // An interrupted turn hands control back to the user: no reset behind their back.
     if (e.reason !== 'answer') return result
-    if (job.mode === 'compact' && job.needsText && !isTextShown) {
-      $.ui.toast('session-meter: compaction skipped: the turn showed no text')
+    // The turn's answer, not isTextShown: a reload between the refusal and here would reset the flag.
+    if (job.mode === 'compact' && job.needsText && !e.answer.trim()) {
+      $.ui.toast('session-meter: compaction skipped: the turn ended without text')
       return result
     }
     let saved: string | undefined

@@ -271,7 +271,7 @@ test('a compact that hands the turn back is refused until the turn has shown the
   expect(String(refused.result)).toContain('end your turn with your whole reply as a `text` block')
   await end()
   expect(compacts).toEqual([])
-  expect(toasts.at(-1)).toBe('session-meter: compaction skipped: the turn showed no text')
+  expect(toasts.at(-1)).toBe('session-meter: compaction skipped: the turn ended without text')
 
   step.text = 'Here is the table.'
   expect((await callReset($, { mode: 'compact' })).isError).toBeUndefined()
@@ -293,9 +293,9 @@ test('a compact that hands the turn back is refused until the turn has shown the
   expect((await callReset($, { mode: 'compact', next: 'run the tests' })).isError).toBeUndefined()
 })
 
-test('a compact refused for want of text runs after the turn once a later message shows text, as models write text only without a tool call', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
-  const { compacts, step } = resetSession($, on)
-  const end = (reason: 'answer' | 'aborted' = 'answer') => $.turn.complete({ answer: '', durationMs: 1_000, isAborted: reason !== 'answer', reason, turnId: 't' })
+test('a compact refused for want of text runs after the turn when its last message shows text, as models write text only without a tool call', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { compacts, step, toasts } = resetSession($, on)
+  const end = (answer: string, reason: 'answer' | 'aborted' = 'answer') => $.turn.complete({ answer, durationMs: 1_000, isAborted: reason !== 'answer', reason, turnId: 't' })
   const lastStep = async () => {
     for await (const chunk of $.turn.step({ turnId: 't', index: 1, model: 'opus', messageCount: 2 })) void chunk
   }
@@ -305,16 +305,30 @@ test('a compact refused for want of text runs after the turn once a later messag
   expect((await callReset($, { mode: 'compact', next: 'the user picks A or B', wait: true })).isError).toBe(true)
   step.text = 'Here is the table. Pick A or B.'
   await lastStep()
-  await end()
+  await end('Here is the table. Pick A or B.')
   expect(compacts).toEqual(["Keep in mind for the user's next message: the user picks A or B"])
+
+  // The turn's answer decides, so a reload that forgets the text shown since the refusal still compacts.
+  step.text = ''
+  expect((await callReset($, { mode: 'compact' })).isError).toBe(true)
+  await end('Here is the table.')
+  expect(compacts).toHaveLength(2)
+
+  // Text shown mid-turn does not count once the turn ends in thinking.
+  expect((await callReset($, { mode: 'compact' })).isError).toBe(true)
+  step.text = 'Checking one more file.'
+  await lastStep()
+  await end('')
+  expect(compacts).toHaveLength(2)
+  expect(toasts.at(-1)).toBe('session-meter: compaction skipped: the turn ended without text')
 
   // An interrupted turn still runs nothing.
   step.text = ''
   expect((await callReset($, { mode: 'compact' })).isError).toBe(true)
   step.text = 'Here is the table.'
   await lastStep()
-  await end('aborted')
-  expect(compacts).toHaveLength(1)
+  await end('Here is the table.', 'aborted')
+  expect(compacts).toHaveLength(2)
 })
 
 test('in the desktop app a compact that waits sends no prompt, and its next goes only with the user\'s next message', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
