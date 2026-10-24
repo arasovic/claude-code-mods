@@ -111,4 +111,11 @@ export const register: Register = on => {
     if (e.agentId === undefined && e.trigger !== 'precompute' && result.skip === undefined) await forget($)
     return result
   })
+  // A seated cc-plugin-sec-default sends session.compact past user-tier mods; /compact, typed or a plugin's, still
+  // shows here. An automatic compaction needs neither: the request after it restarts the clock.
+  on('command.run', { command: 'compact' }, async ($, e, next) => {
+    const result = await next(e)
+    await forget($)
+    return result
+  })
 }

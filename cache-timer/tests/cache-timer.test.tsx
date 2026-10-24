@@ -102,3 +102,20 @@ test('only a main-thread compaction that ran clears the band', async ($, on) => 
   await clock.advance(1000)
   expect(await band()).toBeUndefined()
 })
+
+test('/compact clears the band even when session.compact never reaches the mod', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+  mock.store(on)
+  on('command.run', () => ({ text: '' }))
+  const band = await reply($, on)
+  const run = (command: string) => $.command.run({ origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 }, command, args: '' })
+
+  await run('model')
+  await clock.advance(1000)
+  expect(await band()).toBe('🟢 cache 4:59')
+
+  await run('compact')
+  await clock.advance(1000)
+  expect(await band()).toBeUndefined()
+})
