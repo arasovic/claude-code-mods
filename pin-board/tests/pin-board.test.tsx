@@ -101,3 +101,40 @@ test('only --keep pins come back on the next start, with a toast', async ($, on)
   await $.session.start({ cwd: '/other', surface: 'terminal', isInteractive: true })
   expect(await s.list()).toContain('No pins.')
 })
+
+// The engine's prompts and the conversation's first row, which a compaction replaces.
+function prompts(...[$, on]: Parameters<TestBody>) {
+  let first = 'hello'
+  on('session.messages', () => ({ value: [{ role: 'user' as const, text: first, toolUses: [] }] }))
+  on('prompt.submit', (_$, e) => ({ text: e.text, context: e.context }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const submit = async () => (await $.prompt.submit({ text: 'go', wait: false, origin: { kind: 'composer' } })).context ?? []
+  return { submit, compact: (summary: string) => void (first = summary) }
+}
+
+test('where prompt.compose never runs, the list rides the first prompt and the first after a compaction or /clear', async ($, on) => {
+  const p = prompts($, on)
+  const s = await start($, on)
+  expect(await p.submit()).toEqual([])
+
+  await s.run('pin', 'use pnpm')
+  expect((await p.submit())[0]).toContain('1. use pnpm')
+  expect(await p.submit()).toEqual([])
+
+  p.compact('summary')
+  expect((await p.submit())[0]).toContain('1. use pnpm')
+  expect(await p.submit()).toEqual([])
+
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
+  expect((await p.submit())[0]).toContain('1. use pnpm')
+})
+
+test('once prompt.compose runs, the system prompt carries the list and prompts carry none', async ($, on) => {
+  const p = prompts($, on)
+  const s = await start($, on)
+  await s.run('pin', 'use pnpm')
+  expect(await s.compose()).toContain('1. use pnpm')
+  expect(await p.submit()).toEqual([])
+  p.compact('summary')
+  expect(await p.submit()).toEqual([])
+})

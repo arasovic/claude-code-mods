@@ -22,6 +22,11 @@ export const section = (pins: readonly Pin[]) =>
 // Pins live as long as the process, so they outlast /clear; --keep ones are also stored for the folder and come back on the next start.
 let cwd = ''
 let pins: Pin[] = []
+// A seated cc-plugin-sec-default sends prompt.compose past user-tier mods, so the section never lands; until compose
+// is seen to run, the list rides a prompt instead: the first one, and the first after /clear or a compaction.
+let composed = false
+let needSend = true
+let seenFirst: string | undefined
 
 async function save($: EngineInterface, next: Pin[]) {
   pins = next
@@ -74,7 +79,30 @@ export const register: Register = (on, options) => {
   on('command.run', { command: 'pin' }, ($, e) => pin($, e.args))
   on('command.run', { command: 'unpin' }, ($, e) => unpin($, e.args))
 
+  on('session.end', ($, e, next) => {
+    needSend = true
+    seenFirst = undefined
+    return next(e)
+  })
+
+  // Commands are skipped: /pin and /unpin leave their own note, and a /compact prompt is summarized away.
+  on('prompt.submit', async ($, e, next) => {
+    if (composed || e.command || !pins.length) return next(e)
+    try {
+      // ponytail: reads the whole conversation per prompt for its first row; a compaction is the only thing that replaces it.
+      const first = (await $.session.messages())[0]?.text
+      if (seenFirst !== undefined && first !== seenFirst) needSend = true
+      seenFirst = first
+    } catch {
+      // Detection is best effort: the prompt must go through either way.
+    }
+    if (!needSend) return next(e)
+    needSend = false
+    return next({ ...e, context: [...(e.context ?? []), section(pins)] })
+  })
+
   on('prompt.compose', async ($, e, next) => {
+    composed = true
     const result = await next(e)
     if (!pins.length) return result
     return { sections: [...result.sections, { id: 'pin-board:pins', text: section(pins), scope: 'session' }] }
