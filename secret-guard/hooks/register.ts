@@ -26,19 +26,41 @@ const SECRET_RULES: readonly [string, RegExp][] = [
   ['jwt',/\bey[A-Za-z0-9_-]{17,}\.ey[A-Za-z0-9_-]{17,}\.[A-Za-z0-9_-]{10,}/g],
 ]
 
+// .env style: UPPER_CASE name, unquoted or quoted value, not a $reference or <placeholder>. A leading quote is a list item
+// (`"POSTGRES_PASSWORD=…",` in docker inspect). AUTH and PASS count only as the last whole word (REDISCLI_AUTH, DB_PASS),
+// so AUTHOR, BYPASS and GOOGLE_OAUTH stay; PWD needs a prefix, so the shell's PWD and OLDPWD stay.
+// Passwords are often short, so they hide from 8 characters and other secrets from 12.
+const envLine = (name: string, min: number) =>
+  new RegExp(String.raw`^(?<head>\s*["']?(?:export\s+)?(?:${name})\s*=\s*["']?)(?<value>[^\s"'#$<]{${min},})`, 'gm')
+// code, JSON: a quoted literal assigned to a secret-shaped name
+const quotedLiteral = (name: string, min: number) =>
+  new RegExp(String.raw`(?<head>["']?\b[\w.-]*(?:${name})["']?\s*[:=]\s*(["']))(?<value>[^"'\s$<{]{${min},})(?=\2)`, 'gi')
+
 // Only the value is hidden; the name stays so the model knows the key exists.
 const ASSIGNMENTS = [
-  // .env style: UPPER_CASE name, unquoted or quoted value, not a $reference or <placeholder>
-  // AUTH and PASS count only as the last whole word (REDISCLI_AUTH, DB_PASS), so AUTHOR, BYPASS and GOOGLE_OAUTH stay.
-  /^(?<head>\s*(?:export\s+)?(?:[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)[A-Z0-9_]*|(?:[A-Z0-9_]*_)?(?:AUTH|PASS))\s*=\s*["']?)(?<value>[^\s"'#$<]{12,})/gm,
-  // code, JSON, YAML: a quoted literal assigned to a secret-shaped name
-  /(?<head>["']?\b[\w.-]*(?:secret|token|password|passwd|api_?key|access_?key|private_?key)["']?\s*[:=]\s*(["']))(?<value>[^"'\s$<{]{12,})(?=\2)/gi,
+  envLine(String.raw`[A-Z0-9_]*(?:SECRET|TOKEN|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)[A-Z0-9_]*|(?:[A-Z0-9_]*_)?AUTH`, 12),
+  envLine(String.raw`[A-Z0-9_]*(?:PASSWORD|PASSWD)[A-Z0-9_]*|(?:[A-Z0-9_]*_)?PASS|[A-Z0-9_]*_PWD`, 8),
+  quotedLiteral('secret|token|api_?key|access_?key|private_?key', 12),
+  quotedLiteral('password|passwd', 8),
+  // YAML: an unquoted value that runs to the end of the line. It needs a digit, and code punctuation or a dotted name
+  // (`token: getToken(a),`, `password: config.db.password1`, `token: res.tokens[0]`) means it is code.
+  /^(?<head>[ \t]*(?:-[ \t]+)?[\w.-]*(?:secret|token|password|passwd|api_?key|access_?key|private_?key)[ \t]*:[ \t]+)(?<value>(?=\S*\d)(?![A-Za-z_]\w*(?:\.\w+)+[ \t\r]*$)[^\s(,;{[\]$<#"']{8,})(?=[ \t\r]*$)/gim,
   // the password in a connection URL: redis://:pass@host, postgres://user:pass@host; it runs to the last @
   /(?<head>\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]*:)(?<value>[^\s/$<{[][^\s/]{7,})(?=@)/gi,
+  // a HAR header or cookie value; it runs before Bearer so the whole value goes
+  /(?<head>"name"\s*:\s*"(?:authorization|proxy-authorization|cookie|set-cookie|x-api-key)"\s*,\s*"value"\s*:\s*")(?<value>(?:[^"\\]|\\.){8,})(?=")/gi,
+  // an Authorization header's credential, quoted or escaped in code and JSON; `Bearer YOUR_TOKEN` has no digit, so it
+  // stays, and "basic" or "bearer" in prose has no header name
+  /(?<head>\bauthorization[\\"'\x60]*\s*[:=]\s*[\\"'\x60]*(?:bearer|basic)\s+)(?<value>(?=[\w.~+/=-]*\d)(?=[\w.~+/=-]*[A-Za-z])[\w.~+/=-]{20,})/gi,
+  // a credential in a URL query
+  /(?<head>[?&](?:access_token|refresh_token|id_token|token|api_?key|client_secret|sig|signature|x-amz-signature|x-amz-security-token)=)(?<value>(?=[^\s&#"'<>$]*\d)[^\s&#"'<>$]{12,})/gi,
 ]
 
 const tag = (rule: string) => `[secret-guard: ${rule}]`
 const isExample = (match: string) => /example|dummy|placeholder/i.test(match)
+// A file path is where a key lives, not the key (GOOGLE_APPLICATION_CREDENTIALS=/home/me/sa.json).
+const isPath = (value: string) => /^(?:~|\.{1,2})?\/\S*\.\w+$/.test(value)
+const hideable = (value: string) => !isExample(value) && !value.includes('[secret-guard') && !isPath(value)
 
 export const scrub = (text: string): { text: string; rules: string[] } => {
   const rules: string[] = []
@@ -54,13 +76,20 @@ export const scrub = (text: string): { text: string; rules: string[] } => {
   for (const pattern of ASSIGNMENTS) {
     out = out.replace(pattern, (match, ...args) => {
       const { head, value } = args.at(-1) as { head: string; value: string }
-      if (isExample(value) || value.startsWith('[secret-guard')) return match
+      if (!hideable(value)) return match
       rules.push('secret-value')
       return head + tag('secret-value')
     })
   }
   return { text: out, rules }
 }
+
+// A string field named like a secret is hidden whole. Paging cursors are named like tokens but are not secrets.
+const SECRET_FIELD = /(?:secret|token|password|passwd|api_?key|access_?key|private_?key|credentials?|(?:^|[_-])auth|[_-]pwd)$/i
+const CURSOR_FIELD = /(?:page|pagination|next|sync|continuation)_?token$/i
+const secretField = (key: string, value: unknown) =>
+  typeof value === 'string' && SECRET_FIELD.test(key) && !CURSOR_FIELD.test(key) &&
+  /^[^\s$<{]{8,}$/.test(value) && !/^\d+$/.test(value) && hideable(value)
 
 // Rewrites every string inside a value, keeping its shape.
 export const scrubDeep = <T>(value: T, found: string[]): T => {
@@ -71,7 +100,11 @@ export const scrubDeep = <T>(value: T, found: string[]): T => {
   }
   if (Array.isArray(value)) return value.map(v => scrubDeep(v, found)) as T
   if (value !== null && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, scrubDeep(v, found)])) as T
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => {
+      if (!secretField(k, v)) return [k, scrubDeep(v, found)]
+      found.push('secret-value')
+      return [k, tag('secret-value')]
+    })) as T
   return value
 }
 
