@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, SessionMessage } from 'claude-code'
+import type { EngineInterface, Register, SessionMessage } from 'claude-code'
 
 // Paths edited since the last compaction, listed in the next handoff.
 const edited = atom({ plugin: 'compact-keeper', key: 'edited' } as const, [] as string[])
@@ -42,6 +42,40 @@ export const handoff = (h: { at: number; cwd: string; sessionId: string; trigger
   ].join('\n')
 }
 
+type Saved = { trigger: string; instructions?: string; tokensBefore?: number; tokensAfter?: number; summary: string }
+
+async function save($: EngineInterface, h: Saved) {
+  try {
+    const at = await $.clock.now()
+    const cwd = await $.session.cwd()
+    const sessionId = await $.session.id()
+    const home = await $.env.get('HOME')
+    const files = await read($, edited)
+    const path = `${home ?? '.'}/.claude/handoffs/${fileName(at, cwd, sessionId)}`
+    await $.fs.write(path, handoff({ ...h, at, cwd, sessionId, files }))
+    await update($, edited, () => [])
+    $.ui.toast(`Handoff saved: ${path.replace(home ?? '\0', '~')}`)
+  } catch {
+    // Saving is a convenience: a failed write must never undo the compaction.
+  }
+}
+
+// A seated cc-plugin-sec-default sends session.compact past user-tier mods. The fallback notices a compaction
+// afterwards: it is the only thing that replaces the conversation's first row (/clear resets in session.end).
+let seenFirst: string | undefined
+// ponytail: module state, so a reload between a compaction and its check writes that handoff twice.
+let handled = false
+
+async function check($: EngineInterface, trigger: string, instructions?: string) {
+  const messages = await $.session.messages()
+  const first = messages[0]?.text
+  const compacted = seenFirst !== undefined && first !== undefined && first !== seenFirst
+  const saved = handled
+  seenFirst = first
+  handled = false
+  if (compacted && !saved) await save($, { trigger, instructions, summary: first })
+}
+
 export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
@@ -56,19 +90,26 @@ export const register: Register = on => {
     const result = await next(e)
     // A precompute may never be installed, and a subagent's compaction is not the conversation's.
     if (result.skip !== undefined || e.trigger === 'precompute' || e.agentId !== undefined) return result
-    try {
-      const at = await $.clock.now()
-      const cwd = await $.session.cwd()
-      const sessionId = await $.session.id()
-      const home = await $.env.get('HOME')
-      const files = await read($, edited)
-      const path = `${home ?? '.'}/.claude/handoffs/${fileName(at, cwd, sessionId)}`
-      await $.fs.write(path, handoff({ at, cwd, sessionId, trigger: e.trigger, instructions: e.instructions, tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter, files, summary: summaryOf(e.messages, result.messages) }))
-      await update($, edited, () => [])
-      $.ui.toast(`Handoff saved: ${path.replace(home ?? '\0', '~')}`)
-    } catch {
-      // Saving is a convenience: a failed write must never undo the compaction.
-    }
+    handled = true
+    await save($, { trigger: e.trigger, instructions: e.instructions, tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter, summary: summaryOf(e.messages, result.messages) })
     return result
+  })
+
+  // /compact, typed or run by a plugin, is checked as soon as it is done; any other compaction at the end of its turn.
+  on('command.run', { command: 'compact' }, async ($, e, next) => {
+    const result = await next(e)
+    await check($, e.origin.kind === 'plugin' ? 'plugin' : 'manual', e.args.trim() || undefined).catch(() => {})
+    return result
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    if (e.agentId === undefined) await check($, 'auto or plugin').catch(() => {})
+    return next(e)
+  })
+
+  on('session.end', ($, e, next) => {
+    seenFirst = undefined
+    handled = false
+    return next(e)
   })
 }

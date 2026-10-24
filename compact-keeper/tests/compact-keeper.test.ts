@@ -1,4 +1,4 @@
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
 import { fileName, handoff, summaryOf } from '../hooks/register'
 
@@ -42,4 +42,60 @@ test('only a main-thread compaction that ran writes a handoff', async ($, on) =>
 
   await $.session.compact({ trigger: 'auto', messages })
   expect(writes).toHaveLength(1)
+})
+
+const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
+
+// The engine beneath, with the conversation's first row, which a compaction replaces.
+function engine(...[$, on]: Parameters<TestBody>) {
+  mock.env(on, { HOME: '/home/a' })
+  on('clock.now', () => ({ value: 0 }))
+  const writes: string[] = []
+  on('fs.write', (_$, e) => (writes.push(e.text), { value: undefined }))
+  on('session.cwd', () => ({ value: '/x' }))
+  on('session.id', () => ({ value: 'abcdef12' }))
+  on('ui.toast', () => ({ value: undefined }))
+  let first = 'hello'
+  on('session.messages', () => ({ value: [msg(first)] }))
+  on('command.run', () => ({ text: '' }))
+  on('turn.complete', (_$, e) => ({ text: e.answer }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const turn = (agentId?: string) => $.turn.complete({ answer: '', durationMs: 0, isAborted: false, reason: 'answer', turnId: 't', ...(agentId ? { agentId } : {}) })
+  return { writes, turn, compact: (summary: string) => void (first = summary) }
+}
+
+test('where session.compact never runs, a compaction is saved once the conversation shows it', async ($, on) => {
+  const s = engine($, on)
+  await s.turn()
+  expect(s.writes).toEqual([])
+
+  s.compact('summary one')
+  await $.command.run({ ...RUN, command: 'compact', args: ' keep the plan ' })
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]).toContain('(manual)')
+  expect(s.writes[0]).toContain('- Instructions: keep the plan')
+  expect(s.writes[0]).toContain('## Summary\n\nsummary one')
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
+
+  s.compact('summary two')
+  await s.turn('sub')
+  expect(s.writes).toHaveLength(1)
+  await s.turn()
+  expect(s.writes[1]).toContain('(auto or plugin)')
+
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
+  s.compact('first prompt after /clear')
+  await s.turn()
+  expect(s.writes).toHaveLength(2)
+})
+
+test('a compaction session.compact saved is not saved again by the late check', async ($, on) => {
+  const s = engine($, on)
+  on('session.compact', () => ({ messages: [msg('summary')] }))
+  await s.turn()
+  s.compact('summary')
+  await $.session.compact({ trigger: 'auto', messages: [msg('old', 'h1')] })
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
 })
