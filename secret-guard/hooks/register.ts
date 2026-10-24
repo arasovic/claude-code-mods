@@ -12,7 +12,18 @@ const SECRET_RULES: readonly [string, RegExp][] = [
   ['google-api-key', /\bAIza[\w-]{35}(?![\w-])/g],
   ['anthropic-key', /\bsk-ant-[\w-]{20,}/g],
   ['openai-key', /\bsk-(?:proj|svcacct|admin)-[\w-]{20,}/g],
-  ['jwt', /\bey[A-Za-z0-9_-]{17,}\.ey[A-Za-z0-9_-]{17,}\.[A-Za-z0-9_-]{10,}/g],
+  // OpenRouter, Groq and xAI follow trufflehog's detectors; gitleaks has no rule for them.
+  ['openrouter-key', /\bsk-or-v1-[0-9a-f]{64}\b/g],
+  ['groq-key', /\bgsk_[A-Za-z0-9]{52}\b/g],
+  ['xai-key', /\bxai-\w{80}\b/g],
+  ['huggingface-token', /\bhf_[A-Za-z]{34}\b/g],
+  ['npm-token', /\bnpm_[A-Za-z0-9]{36}\b/g],
+  ['gitlab-token', /\bglpat-[\w-]{20,}(?:\.[0-9a-z]{9}\b)?/g],
+  ['vault-token', /\bhvs\.[\w-]{90,}/g],
+  ['shopify-token', /\bshp(?:at|ca|pa|ss)_[a-fA-F0-9]{32}\b/g],
+  ['sendgrid-key', /\bSG\.[\w=.-]{66}/g],
+  ['age-key', /\bAGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}\b/g],
+  ['jwt',/\bey[A-Za-z0-9_-]{17,}\.ey[A-Za-z0-9_-]{17,}\.[A-Za-z0-9_-]{10,}/g],
 ]
 
 // Only the value is hidden; the name stays so the model knows the key exists.
