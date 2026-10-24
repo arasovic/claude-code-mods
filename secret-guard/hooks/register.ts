@@ -117,8 +117,17 @@ export const sensitivePath = (path: string, home: string, rules = SENSITIVE_PATH
   return rules.some(r => r.test(p))
 }
 
+const SECRET_NAME = String.raw`[A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)`
+
 const SECRET_COMMANDS: readonly RegExp[] = [
-  /^(printenv|compgen -v)\b/, /^(env|set|export|export -p|declare -p|declare -x)$/,
+  /^(printenv|compgen -v)\b/, /^(set|export|export -p)$/,
+  // declare and typeset print every variable when given no name, and a named one with -p (zsh's -m takes a name pattern).
+  /^(declare|typeset)(\s+-\S+)*$/, /^(declare|typeset)\b.*\s-[a-zA-Z]*[pm]/,
+  /^(sops\b.*\s(-d|--decrypt|decrypt)|age\b.*\s(-d|--decrypt)|gpg2?\b.*\s(-[a-zA-Z]*d|--decrypt|--export-secret-(sub)?keys))(\s|=|$)/,
+  /^ansible-vault (view|decrypt)\b/,
+  // pass prints an entry by default; listing, managing and copying to the clipboard do not.
+  /^pass(?=\s+\S)(?!\s+(ls|list|find|search|insert|add|rm|remove|delete|mv|rename|cp|copy|git|init|help|version|edit|--help|--version)(\s|$))(?!.*\s(-c\d*|--clip(=\d+)?)(\s|$))/,
+  /^gcloud secrets versions access\b/, /^az keyvault secret (show|download)\b/,
   /^security (find-generic-password|find-internet-password|dump-keychain)\b/,
   /^gh auth (token|status .*(-t|--show-token))\b/,
   /^aws (configure (get|export-credentials)|sts get-session-token|secretsmanager get-secret-value|ssm get-parameters?\b.*--with-decryption)/,
@@ -132,8 +141,20 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   // commands that print one count too.
   /^bw\b(?=.*\s(get|export|receive|unlock)\b|.*\slist\s+items\b)/,
   /^op\b(?=.*\s(read|inject|signin)\b|.*\sdocument\s+get\b|.*\sitems?\s+get\b.*\s--(reveal|otp|format)\b)/,
-  /^(echo|printf)\b.*\$\{?[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)/i,
+  new RegExp(String.raw`^(echo|printf|print)\b.*\$\{?${SECRET_NAME}|<<<\s*["']?\$\{?${SECRET_NAME}`, 'i'),
 ]
+
+// `env` with no command prints the environment, whatever options or assignments come with it.
+const ASSIGNMENT = String.raw`[A-Za-z_]\w*=(?:'[^']*'|"[^"]*"|[^\s'"])*`
+const ENV_ALONE = new RegExp(String.raw`^(?:${ASSIGNMENT}\s+)*(?:\S*\/)?env(?:\s+(?:-[uC]\s+\S+|-\S+|${ASSIGNMENT}))*$`)
+
+// A script that prints one secret-named variable (`node -p process.env.GITHUB_TOKEN`, `print(os.getenv("API_KEY"))`). The print
+// and the read sit in one statement; `!process.env.X` only tests it.
+const ENV_VALUE = String.raw`(?<!!)(?:process\.env(?:\.|\[\s*["'\x60])|os\.environ(?:\.get\(\s*|\[\s*)["']|os\.getenv\(\s*["']|ENV(?:\.fetch\(\s*|\[\s*)["'])${SECRET_NAME}(?:_\w*)?\b`
+const PRINTS_SECRET_VARIABLE = new RegExp(String.raw`\b(?:console\.\w+|print|puts|pp?|JSON\.stringify|json\.dumps|write)\b[^;&|\n]*?${ENV_VALUE}`, 'i')
+
+// Outside these, ls or stat print only a name; through a pipe, `$(…)` or a backtick that name reaches a command that reads it.
+const PASSES_OUTPUT = /(?<!\|)\|(?!\|)|\$\(|\x60/
 
 // The command a segment runs: without leading `NAME=value` assignments or `env` and its options, and without the directory of a
 // full path, so `AWS_PROFILE=x aws …`, `env -i printenv` and `/usr/bin/printenv` meet the rules above. Bare `env` stays.
@@ -189,15 +210,18 @@ export const secretCommand = (command: string, home: string): string | undefined
   // A script that prints the whole environment is printenv by another name.
   const runnable = withoutDataHeredocs(command)
   if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(runnable)) return 'printing the whole environment prints secrets'
+  if (PRINTS_SECRET_VARIABLE.test(runnable)) return 'printing a secret-named variable prints its value'
+  const passesOutput = PASSES_OUTPUT.test(runnable)
   for (const seg of commandSegments(runnable)) {
     const head = commandHead(seg)
+    if (ENV_ALONE.test(seg)) return '`env` with no command prints the whole environment'
     if (SECRET_COMMANDS.some(r => r.test(head))) return `\`${head.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
     if (jqReadsEnvironment(head)) return '`env` in a jq filter prints the whole environment'
     const text = withoutProse(seg, head)
     const words = pathWords(withoutJqFilter(text))
     // The command comes from the head: pathWords splits `ls=1 cat .env` at `=`, so its first word is `ls`.
     const cmd = head.split(/\s+/)[0] ?? ''
-    if (NON_READING.has(cmd) && !(cmd === 'ssh-keygen' && /\s-[a-zA-Z]*i/.test(head))) continue
+    if (NON_READING.has(cmd) && !passesOutput && !(cmd === 'ssh-keygen' && /\s-[a-zA-Z]*i/.test(head))) continue
     const keys = sshKeys(words, pathWords(seg).length - pathWords(head).length)
     const read = words.filter((_, index) => !keys.has(index))
     // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
