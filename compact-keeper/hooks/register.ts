@@ -100,7 +100,7 @@ export const register: Register = on => {
     return result
   })
 
-  // A compaction is saved at the end of the next main turn; /compact, typed or run by a plugin, only leaves its label.
+  // A compaction is saved at the end of the next main turn or session; /compact, typed or run by a plugin, only leaves its label.
   on('command.run', { command: 'compact' }, async ($, e, next) => {
     const result = await next(e)
     typed = { trigger: e.origin.kind === 'plugin' ? 'plugin' : 'manual', instructions: e.args.trim() || undefined }
@@ -112,7 +112,10 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('session.end', ($, e, next) => {
+  on('session.end', async ($, e, next) => {
+    // /clear ends the session before it empties the conversation; a resume may already show the next one.
+    // ponytail: inside session.end's short wall-clock bound, so a slow disk can cut this write.
+    if (e.reason !== 'resume') await check($).catch(() => {})
     seenFirst = undefined
     handled = false
     typed = undefined
