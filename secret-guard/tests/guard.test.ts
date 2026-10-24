@@ -56,6 +56,44 @@ test('names ending in AUTH or PASS hide their value', () => {
   ]) expect(scrub(text).text).toBe(text)
 })
 
+test('passwords, YAML values, auth headers, URL credentials and HAR headers hide only the value', () => {
+  const pw = 'q7'.repeat(5)
+  const tok = 'Ab1'.repeat(8)
+  for (const [text, hidden] of [
+    [`    "POSTGRES_PASSWORD=${pw}",`, `    "POSTGRES_PASSWORD=${tag('secret-value')}",`],
+    [`DB_PASSWORD=${pw}`, `DB_PASSWORD=${tag('secret-value')}`],
+    [`DB_PWD=${pw}`, `DB_PWD=${tag('secret-value')}`],
+    [`{"password": "${pw}"}`, `{"password": "${tag('secret-value')}"}`],
+    [`db:\n  password: ${pw}\n  port: 5432`, `db:\n  password: ${tag('secret-value')}\n  port: 5432`],
+    [`- api_key: ${tok}`, `- api_key: ${tag('secret-value')}`],
+    [`Authorization: Bearer ${tok}`, `Authorization: Bearer ${tag('secret-value')}`],
+    [`curl -u x -H 'Authorization: Basic ${tok}=='`, `curl -u x -H 'Authorization: Basic ${tag('secret-value')}'`],
+    [`Proxy-Authorization: Basic ${tok}`, `Proxy-Authorization: Basic ${tag('secret-value')}`],
+    [`{"Authorization": "Bearer ${tok}"}`, `{"Authorization": "Bearer ${tag('secret-value')}"}`],
+    [JSON.stringify({ command: `curl -H "Authorization: Bearer ${tok}"` }), JSON.stringify({ command: `curl -H "Authorization: Bearer ${tag('secret-value')}"` })],
+    [`https://api.test/v1?api_key=${tok}&page=2`, `https://api.test/v1?api_key=${tag('secret-value')}&page=2`],
+    [`https://b.test/f?X-Amz-Signature=${'a1'.repeat(32)}`, `https://b.test/f?X-Amz-Signature=${tag('secret-value')}`],
+    [`{"name": "Cookie",\n "value": "sid=${pw}; theme=dark"}`, `{"name": "Cookie",\n "value": "${tag('secret-value')}"}`],
+  ] as [string, string][]) expect(scrub(text).text).toBe(hidden)
+  for (const text of [
+    `API_TOKEN=${pw}`,
+    'PWD=/Users/me/project',
+    'OLDPWD=/Users/me/project',
+    'GOOGLE_APPLICATION_CREDENTIALS=/home/me/sa.json',
+    'password: required',
+    'token: getToken(12345678),',
+    'password: config.db.password1',
+    'accessToken: response.data.tokens[0]',
+    'secret: ${{ secrets.DEPLOY_KEY }}',
+    'git commit -m "add basic sha256-checksum-v2-support"',
+    'fix bearer auth_header_v2_parsing',
+    'Authorization: Bearer YOUR_TOKEN',
+    'Authorization: Bearer $GITHUB_TOKEN',
+    'https://api.test/?token=short1',
+    'https://api.test/?page=123456789012345',
+  ]) expect(scrub(text).text).toBe(text)
+})
+
 test('connection URLs hide only the password', () => {
   expect(scrub('REDIS_URL=redis://:' + 'q7'.repeat(16) + '@app-redis:6379').text).toBe('REDIS_URL=redis://:' + tag('secret-value') + '@app-redis:6379')
   expect(scrub('postgres://app:' + 'q7'.repeat(6) + '@db:5432/x').text).toBe('postgres://app:' + tag('secret-value') + '@db:5432/x')
@@ -88,6 +126,15 @@ test('structured results keep their shape', () => {
   expect(dirty).toEqual({ file: { content: `k=${tag('aws-key')}`, numLines: 1 }, list: ['a', tag('github-token')] })
   expect(found).toEqual(['aws-key', 'github-token'])
   expect(scrubDeep({ a: 'hello', n: 1 }, [])).toEqual({ a: 'hello', n: 1 })
+})
+
+test('a string field named like a secret is hidden whole, a cursor or reference is not', () => {
+  const found: string[] = []
+  const v = 'q7'.repeat(5)
+  expect(scrubDeep({ token: v, auth: { basic_auth: v, accessKey: v }, nextPageToken: v, password: 'short', apiKey: '$API_KEY', pin: '12345678', key_file: '~/keys/sa.json' }, found))
+    .toEqual({ token: tag('secret-value'), auth: { basic_auth: tag('secret-value'), accessKey: tag('secret-value') }, nextPageToken: v, password: 'short', apiKey: '$API_KEY', pin: '12345678', key_file: '~/keys/sa.json' })
+  expect(found).toEqual(['secret-value', 'secret-value', 'secret-value'])
+  expect(scrubDeep({ author: v, oauth: v, max_tokens: 4096, tokenizer: v }, [])).toEqual({ author: v, oauth: v, max_tokens: 4096, tokenizer: v })
 })
 
 test('credential files are recognised, templates and public keys are not', () => {
