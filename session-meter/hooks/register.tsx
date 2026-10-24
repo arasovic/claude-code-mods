@@ -407,11 +407,15 @@ export const register: Register = (on, options) => {
     if (e.agentId !== undefined) return { isError: true as const, result: 'Only the main conversation can reset its context.' }
     if (pct < contextAt) return { isError: true as const, result: `The context is only ${Math.round(pct)}% full; wait for session-meter's note.` }
     if (typeof reset === 'string') return { isError: true as const, result: reset }
-    if (reset.mode === 'compact' && (reset.wait || !reset.next) && !isTextShown)
+    if (reset.mode === 'compact' && (reset.wait || !reset.next) && !isTextShown) {
+      // Told to write text and call again, a model kept writing the reply as thinking before each call (0.4.23): it
+      // wrote text only in a message with no tool call. So the reset is kept and runs if the turn ends showing text.
+      await update($, pending, () => ({ ...reset, needsText: true as const }))
       return {
         isError: true as const,
-        result: 'Refused on purpose, not a miscount: this turn has no `text` block yet. Your reply is in a `thinking` block, and thinking is hidden or summarized, so it cannot carry a reply. Write the reply now as a `text` block (the answer, any table, any question), then call context_reset again in this same turn. Do not end your turn here, and do not tell the user the compaction failed.',
+        result: 'Not run yet: this turn has no `text` block. Your reply is in a `thinking` block, which is hidden or summarized, so it cannot carry a reply. Now end your turn with your whole reply as a `text` block (the answer, any table, any question) and no tool call. The compaction then runs after your turn. Do not call context_reset again, and do not tell the user the compaction failed.',
       }
+    }
     await update($, pending, () => reset)
     return { result: `The ${reset.mode} runs when this turn ends. If your visible reply left out anything you meant to tell the user, write it now. Then end your turn with one short line.` }
   })
@@ -424,6 +428,10 @@ export const register: Register = (on, options) => {
     await update($, pending, () => null)
     // An interrupted turn hands control back to the user: no reset behind their back.
     if (e.reason !== 'answer') return result
+    if (job.mode === 'compact' && job.needsText && !isTextShown) {
+      $.ui.toast('session-meter: compaction skipped: the turn showed no text')
+      return result
+    }
     let saved: string | undefined
     // What the model reads once the reset ends. Kept armed: the prompt.submit hook drops it if a prompt dequeued
     // before it has carried the text.

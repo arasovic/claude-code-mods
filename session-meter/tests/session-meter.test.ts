@@ -260,7 +260,7 @@ test('a compact with next submits it as the next prompt, and one without next or
 })
 
 test('a compact that hands the turn back is refused until the turn has shown the person text, since thinking cannot carry a reply', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
-  const { compacts, step } = resetSession($, on)
+  const { compacts, step, toasts } = resetSession($, on)
   const end = () => $.turn.complete({ answer: '', durationMs: 1_000, isAborted: false, reason: 'answer', turnId: 't' })
   await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
 
@@ -268,9 +268,10 @@ test('a compact that hands the turn back is refused until the turn has shown the
   const refused = await callReset($, { mode: 'compact' })
   expect(refused.isError).toBe(true)
   expect(String(refused.result)).toContain('Your reply is in a `thinking` block')
-  expect(String(refused.result)).toContain('call context_reset again in this same turn')
+  expect(String(refused.result)).toContain('end your turn with your whole reply as a `text` block')
   await end()
   expect(compacts).toEqual([])
+  expect(toasts.at(-1)).toBe('session-meter: compaction skipped: the turn showed no text')
 
   step.text = 'Here is the table.'
   expect((await callReset($, { mode: 'compact' })).isError).toBeUndefined()
@@ -290,6 +291,30 @@ test('a compact that hands the turn back is refused until the turn has shown the
   expect((await callReset($, { mode: 'compact', next: 'the user picks A or B', wait: true })).isError).toBe(true)
   // A compact with a next step goes on alone, so it needs no text.
   expect((await callReset($, { mode: 'compact', next: 'run the tests' })).isError).toBeUndefined()
+})
+
+test('a compact refused for want of text runs after the turn once a later message shows text, as models write text only without a tool call', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { compacts, step } = resetSession($, on)
+  const end = (reason: 'answer' | 'aborted' = 'answer') => $.turn.complete({ answer: '', durationMs: 1_000, isAborted: reason !== 'answer', reason, turnId: 't' })
+  const lastStep = async () => {
+    for await (const chunk of $.turn.step({ turnId: 't', index: 1, model: 'opus', messageCount: 2 })) void chunk
+  }
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+
+  step.text = ''
+  expect((await callReset($, { mode: 'compact', next: 'the user picks A or B', wait: true })).isError).toBe(true)
+  step.text = 'Here is the table. Pick A or B.'
+  await lastStep()
+  await end()
+  expect(compacts).toEqual(["Keep in mind for the user's next message: the user picks A or B"])
+
+  // An interrupted turn still runs nothing.
+  step.text = ''
+  expect((await callReset($, { mode: 'compact' })).isError).toBe(true)
+  step.text = 'Here is the table.'
+  await lastStep()
+  await end('aborted')
+  expect(compacts).toHaveLength(1)
 })
 
 test('in the desktop app a compact that waits sends no prompt, and its next goes only with the user\'s next message', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
