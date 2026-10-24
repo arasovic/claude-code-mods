@@ -89,8 +89,10 @@ export const register: Register = (on, options) => {
   on('prompt.submit', async ($, e, next) => {
     if (composed || e.command || !pins.length) return next(e)
     try {
-      // ponytail: reads the whole conversation per prompt for its first row; a compaction is the only thing that replaces it.
-      const first = (await $.session.messages())[0]?.text
+      // ponytail: reads the whole conversation per prompt for its first message; a compaction is the only thing that replaces it.
+      // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
+      const block = (await $.session.messages({ as: 'api' }))[0]?.content.find(b => b.type === 'text')
+      const first = typeof block?.text === 'string' ? block.text : undefined
       if (seenFirst !== undefined && first !== seenFirst) needSend = true
       seenFirst = first
     } catch {
