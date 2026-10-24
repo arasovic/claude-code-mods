@@ -19,6 +19,16 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 
 ## Limits
 
+- On some setups, Claude Code's built-in "Security default" plugin runs before the mod and sends some rows past it. Secrets in these rows reach Claude and the transcript unhidden:
+  - files you add with `@`, and files Claude Code adds again after a summary
+  - lines from a file that changed outside Claude
+  - notes that other hooks add
+  - conversation summaries
+  - skill text
+  - other attachments, such as an IDE selection
+
+  This happens on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. Your prompts, pasted text, Claude's replies and tool results are still hidden, and the blocks still hold.
+- A credential file you add with `@` is not blocked, because the block covers only what Claude opens. Known key formats in it are still hidden, unless "Security default" runs first.
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.
 - The mod does not read quoted text as commands. So `grep -E "(export )?" file` runs.
 - The mod treats a heredoc as data when `cat` or `tee` writes it out with a quoted delimiter, as in `cat > notes.py <<'EOF'`. It does not check that body. This holds only when the opener line has nothing but `&&` steps before it, and no `{`, `(` or `$(` is still open.
