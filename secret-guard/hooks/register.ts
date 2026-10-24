@@ -208,12 +208,15 @@ const LOCAL_WRITES = new Set(['Write', 'Edit', 'NotebookEdit'])
 
 const EMITTED_TAG = new RegExp(`\\[secret-guard${': '}(${[...SECRET_RULES.map(([rule]) => rule), 'secret-value'].join('|')})\\]`)
 
-// An old_string holding a tag cannot match the file anyway, so checking every field costs nothing.
-export const writesPlaceholder = (args: Record<string, unknown>) => EMITTED_TAG.test(JSON.stringify(args))
+// A tag in a file write, a shell command (`sed -i`, `>`) or an MCP call can replace the real value. Bash's description is only
+// shown, and an old_string holding a tag cannot match the file anyway, so checking every other field costs nothing.
+export const writesPlaceholder = (tool: string, args: Record<string, unknown>) =>
+  (LOCAL_WRITES.has(tool) || tool === 'Bash' || tool.startsWith('mcp__')) &&
+  EMITTED_TAG.test(JSON.stringify(tool === 'Bash' ? { ...args, description: undefined } : args))
 
 const READ_HINT = 'Do not try another way to read it. Use a template such as .env.example, or ask the user to run the step and share only what is safe.'
 const SEND_HINT = 'Take the secret out of the call. If the step needs it, ask the user to run it themselves.'
-const WRITE_HINT = 'That would replace the real value in the file. Edit only the lines you need and leave hidden values untouched, or ask the user to make the change.'
+const WRITE_HINT = 'That would replace the real value with the tag. Change only what you need and leave hidden values untouched, or ask the user to make the change.'
 
 // Module state starts over on reload; the counts are this load's.
 const tally = { hidden: 0, blocked: 0, scrubOff: true }
@@ -257,7 +260,7 @@ export const register: Register = on => {
       if (reason) return deny(reason)
     }
     if (!LOCAL_WRITES.has(e.tool) && scrub(JSON.stringify(args)).rules.length > 0) return deny('this call would send a secret', SEND_HINT)
-    if (LOCAL_WRITES.has(e.tool) && writesPlaceholder(args)) return deny('this write contains a hidden-value tag', WRITE_HINT)
+    if (writesPlaceholder(e.tool, args)) return deny('this call would write a hidden-value tag', WRITE_HINT)
 
     const ran = await next(e)
     if (ran.deny !== undefined || ran.isError) return ran

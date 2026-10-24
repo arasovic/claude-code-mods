@@ -234,10 +234,16 @@ test('a jq filter that reads jq\'s env prints the whole environment', () => {
     expect(secretCommand(c, HOME)).toBeUndefined()
 })
 
-test('a write that would put a hidden-value tag into a file is caught', () => {
-  expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
-  expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
-  expect(writesPlaceholder({ file_path: 'README.md', content: `shows ${tag('<rule>')} tags` })).toBe(false)
+test('a file write, shell command or MCP call that would write a hidden-value tag is caught', () => {
+  const line = `const k = "${tag('secret-value')}"`
+  expect(writesPlaceholder('Write', { file_path: 'a.ts', content: line })).toBe(true)
+  expect(writesPlaceholder('Bash', { command: `sed -i 's/k = .*/${tag('aws-key')}/' a.ts` })).toBe(true)
+  expect(writesPlaceholder('Bash', { command: `echo '${line}' >> a.ts`, description: 'add k' })).toBe(true)
+  expect(writesPlaceholder('mcp__github__create_or_update_file', { path: 'a.ts', content: line })).toBe(true)
+  expect(writesPlaceholder('Bash', { command: 'git status', description: `check ${tag('secret-value')}` })).toBe(false)
+  expect(writesPlaceholder('Agent', { prompt: line })).toBe(false)
+  expect(writesPlaceholder('Write', { file_path: 'a.ts', content: 'clean' })).toBe(false)
+  expect(writesPlaceholder('Write', { file_path: 'README.md', content: `shows ${tag('<rule>')} tags` })).toBe(false)
 })
 
 test('the status line shows the worst thing that happened', () => {
