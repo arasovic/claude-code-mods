@@ -115,6 +115,11 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   /^(echo|printf)\b.*\$\{?[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)/i,
 ]
 
+// The command a segment runs: without leading `NAME=value` assignments or `env` and its options, and without the directory of a
+// full path, so `AWS_PROFILE=x aws …`, `env -i printenv` and `/usr/bin/printenv` meet the rules above. Bare `env` stays.
+const commandHead = (segment: string) =>
+  segment.replace(/^(?:[A-Za-z_]\w*=(?:'[^']*'|"[^"]*"|\S)*\s+|env(?:\s+-[uC]\s+\S+|\s+-\S+)*\s+)+/, '').replace(/^\S*\/(?=\S)/, '')
+
 // Prose names files too (`copy .env.example, then`). Trailing punctuation after a name is dropped, but not after `.` or `/`,
 // so `~/.ssh/.` still names the folder.
 const withoutTrailingPunctuation = (word: string) => word.replace(/(?<=[^./])[.,;:!?)]+$/, '')
@@ -127,8 +132,9 @@ export const secretCommand = (command: string, home: string): string | undefined
   const runnable = withoutDataHeredocs(command)
   if (/\b(console\.log|print|JSON\.stringify|json\.dumps)\(\s*(process\.env|os\.environ)\s*\)/.test(runnable)) return 'printing the whole environment prints secrets'
   for (const seg of commandSegments(runnable)) {
-    if (SECRET_COMMANDS.some(r => r.test(seg))) return `\`${seg.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
-    if (jqReadsEnvironment(seg)) return '`env` in a jq filter prints the whole environment'
+    const head = commandHead(seg)
+    if (SECRET_COMMANDS.some(r => r.test(head))) return `\`${head.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
+    if (jqReadsEnvironment(head)) return '`env` in a jq filter prints the whole environment'
     const words = pathWords(withoutJqFilter(seg))
     const cmd = words[0] ?? ''
     if (NON_READING.has(cmd)) continue
