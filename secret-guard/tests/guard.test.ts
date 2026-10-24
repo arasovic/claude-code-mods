@@ -18,6 +18,22 @@ test('known key formats are hidden and named', () => {
   expect(scrub('-----BEGIN OPENSSH ' + 'PRIVATE KEY-----\ncut off').text).toBe(tag('private-key'))
 })
 
+test('newer provider, registry and vault key formats are hidden and named', () => {
+  for (const [rule, key] of [
+    ['openrouter-key', 'sk-or-' + 'v1-' + 'a1'.repeat(32)],
+    ['groq-key', 'gsk' + '_' + 'Ab1'.repeat(17) + 'C'],
+    ['xai-key', 'xai' + '-' + 'Ab1_'.repeat(20)],
+    ['huggingface-token', 'hf' + '_' + 'AbCd'.repeat(8) + 'Ef'],
+    ['npm-token', 'npm' + '_' + 'Ab1'.repeat(12)],
+    ['gitlab-token', 'glpat' + '-' + 'Ab1_-'.repeat(4)],
+    ['vault-token', 'hvs' + '.' + 'Ab1_'.repeat(23)],
+    ['shopify-token', 'shpat' + '_' + 'a1'.repeat(16)],
+    ['sendgrid-key', 'SG' + '.' + 'Ab1_'.repeat(5) + 'Ab.' + 'Ab1'.repeat(14) + 'A'],
+    ['age-key', 'AGE-SECRET-' + 'KEY-1' + 'QPZRY9X8GF'.repeat(5) + 'QPZRY9X8'],
+  ] as [string, string][]) expect(scrub(`key ${key} end`)).toEqual({ text: `key ${tag(rule)} end`, rules: [rule] })
+  for (const text of ['npm_modules', 'hf_hub_download', 'xai-sdk', 'SG.Group', 'gsk_test']) expect(scrub(text).text).toBe(text)
+})
+
 test('a cut-off private key stays hidden even when later text says example', () => {
   const cut = '-----BEGIN RSA ' + 'PRIVATE KEY-----\nMIIEow\n' + 'x'.repeat(200) + ' see the example docs'
   expect(scrub(cut).text).toBe(tag('private-key'))
