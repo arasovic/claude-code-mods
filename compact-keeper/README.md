@@ -14,6 +14,10 @@ One Markdown file per compaction in `~/.claude/handoffs/`, named `<date>-<time>-
 
 A short toast names the file once it is saved. Subagent compactions are skipped, and a failed write never blocks the compaction.
 
+## Limits
+
+- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. The mod then sees a compaction only after it ran: `/compact` as soon as it ends, any other one at the end of its turn. That file has no token counts, and its trigger reads `auto or plugin` for anything but `/compact`.
+
 ## Install
 
 ```sh
