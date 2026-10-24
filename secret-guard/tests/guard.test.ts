@@ -212,11 +212,17 @@ test('a jq filter names a key, not a file, while every file jq reads is still ch
 test('an ssh key used to log in, a public key and the text of a commit message are not read', () => {
   for (const c of ['ssh -i ~/.ssh/id_ed25519 host', 'scp -i ~/.ssh/id_rsa a.txt host:b', `ssh -o 'IdentityFile ~/.ssh/id_rsa' host`,
     'ssh -o IdentityFile=~/.ssh/deploy host', 'ssh -i~/.ssh/id_rsa host', 'GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git push',
+    'ssh -p 22 -v -i ~/.ssh/id_rsa host', 'ssh -oIdentityFile=~/.ssh/id_rsa host', 'scp -P 22 -i ~/.ssh/id_rsa a host:b', '/usr/bin/ssh -i ~/.ssh/id_rsa host',
+    'GIT_SSH_COMMAND="ssh -o IdentitiesOnly=yes -i ~/.ssh/deploy_key" git push', 'A=1 ls -la ~/.ssh/id_rsa', 'A=1 cp .env.example .env',
     'ssh-keygen -y -f ~/.ssh/id_ed25519', 'ssh-keygen -lf ~/.ssh/id_rsa', 'ssh-add ~/.ssh/id_ed25519', 'git config --get credential.helper',
     'git commit -m "ignore .env files"', 'git commit -am "stop reading .env"', `git tag -a v1 -m 'drop .env'`, 'git stash push -m "wip on .env"',
     `gh pr create --title "Ignore .env" --body "never commit .env"`, 'gh issue comment 3 -b ".env is in .gitignore"'])
     expect(secretCommand(c, HOME)).toBeUndefined()
-  for (const c of ['ssh host cat ~/.ssh/id_rsa', 'less -i ~/.ssh/id_rsa', 'git commit -F .env', 'git commit -t .env', 'gh pr create --body-file .env',
+  for (const c of ['ssh host cat ~/.ssh/id_rsa', 'less -i ~/.ssh/id_rsa', 'ssh host grep -i "" .env', 'ssh -p 22 host grep -i x .env',
+    'ssh -o Port=22 host grep -i x .env', 'cat ssh -- -i ~/.ssh/id_rsa', 'grep "" ssh -i ~/.ssh/id_rsa', 'cat -- GIT_SSH_COMMAND ssh -i .env',
+    'GIT_SSH_COMMAND="ssh -i" cat .env', 'GIT_SSH_COMMAND="ssh -o" IdentityFile=x cat .env',
+    'scp -i ~/.ssh/id_rsa ~/.ssh/id_rsa host:', 'ls=1 cat .env', 'rm=x cat ~/.ssh/id_rsa', 'ssh-keygen -i -m PEM -f ~/.ssh/id_rsa',
+    'echo constructor .env', 'git commit -F .env', 'git commit -t .env', 'gh pr create --body-file .env',
     'git commit -m "$(cat .env)"', 'git commit -m "x" && cat .env', 'echo -m "see .env"', 'git config --get credential.username'])
     expect(secretCommand(c, HOME)).toBeDefined()
 })

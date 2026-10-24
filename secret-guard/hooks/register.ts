@@ -135,13 +135,36 @@ const commandHead = (segment: string) =>
 // so `~/.ssh/.` still names the folder.
 const withoutTrailingPunctuation = (word: string) => word.replace(/(?<=[^./])[.,;:!?)]+$/, '')
 
-// These touch a credential file without printing what is in it. ssh-keygen and ssh-add print a public key at most.
+// These touch a credential file without printing what is in it. ssh-keygen and ssh-add print a public key at most, except
+// `ssh-keygen -i`, which prints a converted private key.
 const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown', 'rm', 'ssh-keygen', 'ssh-add'])
 
-// ssh, scp and sftp read the key given with -i or IdentityFile and print none of it, also in `GIT_SSH_COMMAND="ssh -i …"`.
-const isSshKey = (words: string[], index: number) =>
-  words.slice(0, index).some(word => /^(ssh|scp|sftp)$/.test(word)) &&
-  (/^(-i|identityfile)$/i.test(words[index - 1] ?? '') || /^-i./.test(words[index] ?? ''))
+// ssh, scp and sftp read the key given with -i or IdentityFile and print none of it, also in `GIT_SSH_COMMAND="ssh -i …"`. Only
+// their own options count, up to the destination: in `ssh host grep -i x .env` the -i is the remote grep's. The letters are the
+// options that take a value. Returns the indexes of the key words.
+const SSH_VALUE_OPTIONS = new Map([['ssh', 'BbcDEeFIiJLlmOoPpQRSWw'], ['scp', 'cDFiJloPSX'], ['sftp', 'BbcDFiJloPRSsX']])
+const sshKeys = (words: string[], commandIndex: number) => {
+  const keys = new Set<number>()
+  words.forEach((program, start) => {
+    const values = SSH_VALUE_OPTIONS.get(program.replace(/^\S*\//, ''))
+    if (!values || (start !== commandIndex && !(start < commandIndex && words[start - 1] === 'GIT_SSH_COMMAND'))) return
+    // The ssh in GIT_SSH_COMMAND ends where the real command starts.
+    const end = start === commandIndex ? words.length : commandIndex
+    for (let index = start + 1; index < end; index++) {
+      const word = words[index] ?? ''
+      if (!word.startsWith('-') || word === '--') break
+      const at = [...word].findIndex((letter, position) => position > 0 && values.includes(letter))
+      if (at === -1) continue
+      const value = at + 1 < word.length ? index : ++index
+      if (value >= end) break
+      if (word[at] === 'i') keys.add(value)
+      // pathWords splits `-o IdentityFile=key` at `=`, so an -o value is two words.
+      else if (word[at] === 'o' && /identityfile$/i.test(words[value] ?? '') && value + 1 < end) keys.add(++index)
+      else if (word[at] === 'o') index++
+    }
+  })
+  return keys
+}
 
 // A commit message, title or body names files without reading them, so its quoted text is not read. In git only -m takes
 // text (`-t` names a template file), and a message or body file (`-F`, `--body-file`) is still read.
@@ -163,12 +186,14 @@ export const secretCommand = (command: string, home: string): string | undefined
     if (jqReadsEnvironment(head)) return '`env` in a jq filter prints the whole environment'
     const text = withoutProse(seg, head)
     const words = pathWords(withoutJqFilter(text))
-    const cmd = words[0] ?? ''
-    if (NON_READING.has(cmd)) continue
+    // The command comes from the head: pathWords splits `ls=1 cat .env` at `=`, so its first word is `ls`.
+    const cmd = head.split(/\s+/)[0] ?? ''
+    if (NON_READING.has(cmd) && !(cmd === 'ssh-keygen' && /\s-[a-zA-Z]*i/.test(head))) continue
+    const keys = sshKeys(words, pathWords(seg).length - pathWords(head).length)
+    const read = words.filter((_, index) => !keys.has(index))
     // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
-    const sources = cmd === 'cp' || cmd === 'mv' ? words.slice(1, -1) : words
-    const checked = sources.filter((_, index) => !isSshKey(sources, index))
-    const token = checked.find(w => sensitivePath(withoutTrailingPunctuation(w), home))
+    const sources = cmd === 'cp' || cmd === 'mv' ? read.slice(1, -1) : read
+    const token = sources.find(w => sensitivePath(withoutTrailingPunctuation(w), home))
     if (token) return `${token} is a credential file`
     // A quoted sentence ends like many paths (`-m "~/.ssh/config: add a host"`), so a whole quoted word is held only to
     // the rules for paths with spaces, the ones that need one.
