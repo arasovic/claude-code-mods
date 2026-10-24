@@ -64,6 +64,15 @@ export const scrubDeep = <T>(value: T, found: string[]): T => {
   return value
 }
 
+// When the scrub fails, a row keeps its blocks but none of its text. Only text and a tool result's content can be rewritten;
+// the engine puts back every other block.
+const WITHHELD = '[secret-guard: the check failed, so this text was withheld]'
+export const withheld = <T extends { type: string; [field: string]: unknown }>(content: T[]): T[] =>
+  content.map(block =>
+    block.type === 'text' ? { ...block, text: WITHHELD }
+    : block.type === 'tool_result' ? { ...block, content: typeof block.content === 'string' ? WITHHELD : [{ type: 'text', text: WITHHELD }] }
+    : block)
+
 // Browser profiles and password-manager data, whose paths can hold spaces (`Application Support`, `User Data`, `Login Data`,
 // `Group Containers`). Local State holds the key that decrypts Chromium's cookies and passwords.
 const SPACED_PATHS: readonly RegExp[] = [
@@ -216,6 +225,8 @@ export const writesPlaceholder = (tool: string, args: Record<string, unknown>) =
 
 const READ_HINT = 'Do not try another way to read it. Use a template such as .env.example, or ask the user to run the step and share only what is safe.'
 const SEND_HINT = 'Take the secret out of the call. If the step needs it, ask the user to run it themselves.'
+const FAILED_HINT = 'Do not retry it the same way. Tell the user, who can run the step themselves.'
+const RAN_HINT = 'Do not run it again. Check its effect another way, or tell the user it may have run.'
 const WRITE_HINT = 'That would replace the real value with the tag. Change only what you need and leave hidden values untouched, or ask the user to make the change.'
 
 // Module state starts over on reload; the counts are this load's.
@@ -270,6 +281,16 @@ export const register: Register = on => {
     tally.hidden += found.length
     show($)
     return { result, context: ran.context }
+  }).catch(($, e, next) => {
+    // A failed hook is skipped, so the tool would run, or its raw result would stand. Refuse in both cases: replaying `next`
+    // here would hand back the unscrubbed result. The handler has one second, so it does nothing else.
+    tally.blocked++
+    if (next.error.kind !== 're-entry') show($)
+    // Once `next` was called the tool may have run (a push, a write), and a refusal undoes nothing, so the model must not
+    // read it as "did not run".
+    return next.called
+      ? { deny: `secret-guard: the check failed after the call started. It may have run; its output was withheld. ${RAN_HINT}` }
+      : { deny: `secret-guard: the check failed, so the call was refused before it ran. ${FAILED_HINT}` }
   })
 
   // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
@@ -281,5 +302,5 @@ export const register: Register = on => {
     tally.hidden += found.length
     show($)
     return next({ ...e, message: { ...e.message, content } })
-  })
+  }).catch(($, e, next) => next.called ? next(e) : next({ ...e, message: { ...e.message, content: withheld(e.message.content) } }))
 }

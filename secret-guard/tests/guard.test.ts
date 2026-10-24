@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { scrub, scrubDeep, secretCommand, sensitivePath, statusText, writesPlaceholder } from '../hooks/register'
+import { scrub, scrubDeep, secretCommand, sensitivePath, statusText, withheld, writesPlaceholder } from '../hooks/register'
 
 // Synthetic values, built so this file holds no literal that a scanner flags.
 const AWS = 'AKIA' + 'ABCDEFGHIJKLMNOP'
@@ -244,6 +244,24 @@ test('a file write, shell command or MCP call that would write a hidden-value ta
   expect(writesPlaceholder('Agent', { prompt: line })).toBe(false)
   expect(writesPlaceholder('Write', { file_path: 'a.ts', content: 'clean' })).toBe(false)
   expect(writesPlaceholder('Write', { file_path: 'README.md', content: `shows ${tag('<rule>')} tags` })).toBe(false)
+})
+
+test('a check that fails after the tool started withholds the output and says the tool may have run', async ($, on) => {
+  on('tool.call', () => { throw new Error('beneath') })
+  const r = await $.tool.call({ tool: 'Bash', command: 'git status' })
+  expect(r.deny).toContain('It may have run')
+})
+
+test('a row whose check failed keeps its blocks but not their text', () => {
+  type Block = { type: string; [field: string]: unknown }
+  const kept: Block[] = [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }, { type: 'image', source: { type: 'base64' } }]
+  const out = withheld<Block>([{ type: 'text', text: AWS }, { type: 'tool_result', tool_use_id: 't1', content: AWS },
+    { type: 'tool_result', tool_use_id: 't2', content: [{ type: 'text', text: AWS }], is_error: true }, ...kept])
+  expect(JSON.stringify(out)).not.toContain(AWS)
+  expect(out.map(b => b.type)).toEqual(['text', 'tool_result', 'tool_result', 'tool_use', 'image'])
+  expect(out.slice(1, 3).map(b => b.tool_use_id)).toEqual(['t1', 't2'])
+  expect(typeof out[1]?.content).toBe('string')
+  expect(out.slice(3)).toEqual(kept)
 })
 
 test('the status line shows the worst thing that happened', () => {
