@@ -52,7 +52,7 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 - The quoted text of a git `-m` message and of a gh `--title`, `--body` or `--notes` is not read, so `git commit -m "ignore .env files"` runs. A message or body file (`-F`, `--body-file`) is still read, and so is quoted text with `$` or a backtick in it.
 - Commands that touch a credential file without printing it still run: `ls`, `stat`, `test` / `[`, `touch`, `chmod`, `chown`, `rm`, `ssh-keygen` (but not `-i`, which prints a private key), `ssh-add`, and `ssh`, `scp` or `sftp` with a key given by `-i` or `IdentityFile` before the host (in `GIT_SSH_COMMAND` too). `cp` and `mv` run when the credential file is the target (`cp .env.example .env`), not when it is the source, so a file cannot be copied to a new name and read there.
 - The screen can show a row for a moment before it is rewritten. Claude and the transcript only read the hidden form.
-- A value hidden in source code, such as a test token, is hidden from Claude as well. Claude can still edit the other lines of that file. A write that would put a `[secret-guard: <rule>]` tag back into a file is refused, so the real value is never overwritten; Claude will ask you to change that line.
+- A value hidden in source code, such as a test token, is hidden from Claude as well. Claude can still edit the other lines of that file. A file write, shell command or MCP call that would put a `[secret-guard: <rule>]` tag back is refused, so the real value is never overwritten; Claude will ask you to change that line.
 
 ## Install
 
