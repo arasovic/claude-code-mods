@@ -111,7 +111,11 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   /^az account get-access-token\b/,
   /^kubectl (config view .*--raw|get secrets?\b)/,
   /^git (credential fill|config .*--get.*credential)/,
-  /^(op read|bw get|vault (read|kv get)|doppler secrets|heroku auth:token)\b/,
+  /^(vault (read|kv get)|doppler secrets|heroku auth:token)\b/,
+  // Global options can come before the subcommand (`bw --session x get …`). A session key opens the whole vault, so the
+  // commands that print one count too.
+  /^bw\b(?=.*\s(get|export|receive|unlock)\b|.*\slist\s+items\b)/,
+  /^op\b(?=.*\s(read|inject|signin)\b|.*\sdocument\s+get\b|.*\sitems?\s+get\b.*\s--(reveal|otp|format)\b)/,
   /^(echo|printf)\b.*\$\{?[A-Za-z0-9_]*(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|ACCESS_?KEY|PRIVATE_?KEY|CREDENTIAL)/i,
 ]
 
