@@ -252,7 +252,7 @@ const resetSpec = (action: ContextAction) => {
       ...(canClear
         ? ['Use mode "clear" instead when the next work does not build on this conversation. The conversation is cleared and the new session sees only your `handoff`, so it must carry the goal, what is done, the decisions taken, the files that matter and the next step.']
         : []),
-      'Write your whole reply as a `text` block before the call, including any question or choice you put to the user: a `thinking` block is hidden or summarized, so it cannot carry a reply. After the call, end your turn with one short line.',
+      'Write your whole reply as a `text` block before the call, including any question or choice you put to the user: a `thinking` block is hidden or summarized, so it cannot carry a reply. After the call, end your turn with one short line, or, if it answered "Not run yet", with your whole reply.',
     ].join(' '),
     inputSchema: {
       type: 'object',
