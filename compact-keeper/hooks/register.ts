@@ -61,17 +61,25 @@ async function save($: EngineInterface, h: Saved) {
 }
 
 // A seated cc-plugin-sec-default sends session.compact past user-tier mods. The fallback notices a compaction
-// afterwards: it is the only thing that replaces the conversation's first row (/clear resets in session.end).
+// afterwards: it is the only thing that replaces the conversation's first text (/clear resets in session.end).
 let seenFirst: string | undefined
 // ponytail: module state, so a reload between a compaction and its check writes that handoff twice.
 let handled = false
 // What /compact was run with: core swaps the conversation only after the command returns, so the next check saves it.
 let typed: { trigger: string; instructions?: string } | undefined
+// Ticks left to look for the conversation /compact leaves.
+let polls = 0
+const POLL_MS = 500
+
+async function firstText($: EngineInterface) {
+  // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
+  // Core's own notes can come ahead of the summary, and a compaction sends new ones.
+  const block = (await $.session.messages({ as: 'api' })).flatMap(m => m.content).find(b => b.type === 'text' && typeof b.text === 'string' && !b.text.startsWith('<system-reminder>'))
+  return typeof block?.text === 'string' ? block.text : undefined
+}
 
 async function check($: EngineInterface) {
-  // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
-  const block = (await $.session.messages({ as: 'api' }))[0]?.content.find(b => b.type === 'text')
-  const first = typeof block?.text === 'string' ? block.text : undefined
+  const first = await firstText($)
   const compacted = seenFirst !== undefined && first !== undefined && first !== seenFirst
   const saved = handled
   const run = typed
@@ -81,7 +89,20 @@ async function check($: EngineInterface) {
   if (compacted && !saved) await save($, { trigger: run?.trigger ?? 'auto or plugin', instructions: run?.instructions, summary: first })
 }
 
+// The desktop's /clear stops the process, and by session.end the conversation is out of reach,
+// so /compact is saved as soon as its conversation shows, not at the next turn.
+async function poll($: EngineInterface) {
+  if (typed === undefined || polls <= 0) return
+  polls--
+  const first = await firstText($)
+  // A conversation read mid-swap may have no first text; checking it would drop the pending label.
+  if (first !== undefined && first !== seenFirst) await check($)
+}
+
 export const register: Register = on => {
+  // A timer started in any other hook stops when that hook's dispatch ends.
+  on('session.start', async ($, e, next) => ($.clock.every(POLL_MS, () => void poll($).catch(() => {})), next(e)))
+
   on('tool.call', async ($, e, next) => {
     const result = await next(e)
     if ((e.tool === 'Edit' || e.tool === 'Write') && result.deny === undefined && !result.isError) {
@@ -100,10 +121,13 @@ export const register: Register = on => {
     return result
   })
 
-  // A compaction is saved at the end of the next main turn or session; /compact, typed or run by a plugin, only leaves its label.
+  // /compact, typed or run by a plugin, leaves its label for the poll; any other compaction waits for the next main turn or session end.
   on('command.run', { command: 'compact' }, async ($, e, next) => {
+    // A resumed session can compact before any turn has read its first message.
+    seenFirst ??= await firstText($).catch(() => undefined)
     const result = await next(e)
     typed = { trigger: e.origin.kind === 'plugin' ? 'plugin' : 'manual', instructions: e.args.trim() || undefined }
+    polls = 240
     return result
   })
 
@@ -113,7 +137,8 @@ export const register: Register = on => {
   })
 
   on('session.end', async ($, e, next) => {
-    // /clear ends the session before it empties the conversation; a resume may already show the next one.
+    // The terminal's /clear ends the session before it empties the conversation; a resume may already show the next one.
+    // The desktop's /clear stops the process instead, and reading the conversation here throws.
     // ponytail: inside session.end's short wall-clock bound, so a slow disk can cut this write.
     if (e.reason !== 'resume') await check($).catch(() => {})
     seenFirst = undefined

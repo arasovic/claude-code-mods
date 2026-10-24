@@ -49,20 +49,22 @@ const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscree
 // The engine beneath, with the conversation's first row, which a compaction replaces.
 function engine(...[$, on]: Parameters<TestBody>) {
   mock.env(on, { HOME: '/home/a' })
-  on('clock.now', () => ({ value: 0 }))
+  const clock = mock.clock(on)
   const writes: string[] = []
   on('fs.write', (_$, e) => (writes.push(e.text), { value: undefined }))
   on('session.cwd', () => ({ value: '/x' }))
   on('session.id', () => ({ value: 'abcdef12' }))
   on('ui.toast', () => ({ value: undefined }))
   let first = 'hello'
-  // A compaction replaces the request's first message; the rows form keeps the old one.
-  on('session.messages', (_$, e) => (e.as === 'api' ? { value: [{ role: 'user' as const, content: [{ type: 'text', text: first }] }] } : { value: [msg('hello')] }))
+  // A compaction replaces the request's first message, and core's notes ahead of it; the rows form keeps the old one.
+  const api = () => [{ role: 'user' as const, content: [{ type: 'text', text: `<system-reminder>\nbefore ${first}\n</system-reminder>` }, { type: 'text', text: first }] }]
+  on('session.messages', (_$, e) => (e.as === 'api' ? { value: api() } : { value: [msg('hello')] }))
   on('command.run', () => ({ text: '' }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
   const turn = (agentId?: string) => $.turn.complete({ answer: '', durationMs: 0, isAborted: false, reason: 'answer', turnId: 't', ...(agentId ? { agentId } : {}) })
-  return { writes, turn, compact: (summary: string) => void (first = summary) }
+  return { writes, turn, clock, compact: (summary: string) => void (first = summary) }
 }
 
 test('where session.compact never runs, a compaction is saved once the conversation shows it', async ($, on) => {
@@ -108,6 +110,22 @@ test('a compaction no turn has checked yet is saved when the session ends, but n
 
   s.compact('another conversation')
   await $.session.end({ reason: 'resume', sessionId: 's', resume: { id: 's' } })
+  expect(s.writes).toHaveLength(1)
+})
+
+test('a /compact is saved once its conversation shows, before any turn, even the first in a resumed session', async ($, on) => {
+  const s = engine($, on)
+  await $.session.start({ cwd: '/x', surface: null, isInteractive: true })
+  await $.command.run({ ...RUN, command: 'compact', args: '' })
+  await s.clock.advance(2000)
+  expect(s.writes).toEqual([])
+
+  s.compact('summary')
+  await s.clock.advance(500)
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]).toContain('(manual)')
+  await s.clock.advance(2000)
+  await s.turn()
   expect(s.writes).toHaveLength(1)
 })
 
