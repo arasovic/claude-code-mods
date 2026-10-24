@@ -116,7 +116,8 @@ const SECRET_COMMANDS: readonly RegExp[] = [
   /^gcloud auth (application-default )?print-(access|identity)-token\b/,
   /^az account get-access-token\b/,
   /^kubectl (config view .*--raw|get secrets?\b)/,
-  /^git (credential fill|config .*--get.*credential)/,
+  // credential.helper names the helper program, not a secret.
+  /^git (credential fill|config .*--get.*credential(?!\.helper\b))/,
   /^(vault (read|kv get)|doppler secrets|heroku auth:token)\b/,
   // Global options can come before the subcommand (`bw --session x get …`). A session key opens the whole vault, so the
   // commands that print one count too.
@@ -134,8 +135,23 @@ const commandHead = (segment: string) =>
 // so `~/.ssh/.` still names the folder.
 const withoutTrailingPunctuation = (word: string) => word.replace(/(?<=[^./])[.,;:!?)]+$/, '')
 
-// These touch a credential file without printing what is in it.
-const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown', 'rm'])
+// These touch a credential file without printing what is in it. ssh-keygen and ssh-add print a public key at most.
+const NON_READING = new Set(['ls', 'stat', 'test', '[', 'touch', 'chmod', 'chown', 'rm', 'ssh-keygen', 'ssh-add'])
+
+// ssh, scp and sftp read the key given with -i or IdentityFile and print none of it, also in `GIT_SSH_COMMAND="ssh -i …"`.
+const isSshKey = (words: string[], index: number) =>
+  words.slice(0, index).some(word => /^(ssh|scp|sftp)$/.test(word)) &&
+  (/^(-i|identityfile)$/i.test(words[index - 1] ?? '') || /^-i./.test(words[index] ?? ''))
+
+// A commit message, title or body names files without reading them, so its quoted text is not read. In git only -m takes
+// text (`-t` names a template file), and a message or body file (`-F`, `--body-file`) is still read.
+const QUOTED_TEXT = String.raw`("(?:[^"\\$\x60]|\\.)*"|'[^']*')`
+const GIT_MESSAGE = new RegExp(String.raw`(?<=\s(?:-[a-zA-Z]*m|--message)[\s=])${QUOTED_TEXT}`, 'g')
+const GH_TEXT = new RegExp(String.raw`(?<=\s(?:-[tbn]|--title|--body|--notes)[\s=])${QUOTED_TEXT}`, 'g')
+const withoutProse = (segment: string, head: string) =>
+  /^git (commit|tag|merge|stash)\b/.test(head) ? segment.replace(GIT_MESSAGE, '""')
+  : /^gh (issue|pr|release) /.test(head) ? segment.replace(GH_TEXT, '""')
+  : segment
 
 export const secretCommand = (command: string, home: string): string | undefined => {
   // A script that prints the whole environment is printenv by another name.
@@ -145,16 +161,18 @@ export const secretCommand = (command: string, home: string): string | undefined
     const head = commandHead(seg)
     if (SECRET_COMMANDS.some(r => r.test(head))) return `\`${head.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
     if (jqReadsEnvironment(head)) return '`env` in a jq filter prints the whole environment'
-    const words = pathWords(withoutJqFilter(seg))
+    const text = withoutProse(seg, head)
+    const words = pathWords(withoutJqFilter(text))
     const cmd = words[0] ?? ''
     if (NON_READING.has(cmd)) continue
     // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
-    const checked = cmd === 'cp' || cmd === 'mv' ? words.slice(1, -1) : words
+    const sources = cmd === 'cp' || cmd === 'mv' ? words.slice(1, -1) : words
+    const checked = sources.filter((_, index) => !isSshKey(sources, index))
     const token = checked.find(w => sensitivePath(withoutTrailingPunctuation(w), home))
     if (token) return `${token} is a credential file`
     // A quoted sentence ends like many paths (`-m "~/.ssh/config: add a host"`), so a whole quoted word is held only to
     // the rules for paths with spaces, the ones that need one.
-    const quotedPath = quotedWords(seg).find(word => sensitivePath(word, home, SPACED_PATHS))
+    const quotedPath = quotedWords(text).find(word => sensitivePath(word, home, SPACED_PATHS))
     if (quotedPath) return `${quotedPath} is a credential file`
   }
   return undefined

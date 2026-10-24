@@ -209,6 +209,18 @@ test('a jq filter names a key, not a file, while every file jq reads is still ch
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
+test('an ssh key used to log in, a public key and the text of a commit message are not read', () => {
+  for (const c of ['ssh -i ~/.ssh/id_ed25519 host', 'scp -i ~/.ssh/id_rsa a.txt host:b', `ssh -o 'IdentityFile ~/.ssh/id_rsa' host`,
+    'ssh -o IdentityFile=~/.ssh/deploy host', 'ssh -i~/.ssh/id_rsa host', 'GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key" git push',
+    'ssh-keygen -y -f ~/.ssh/id_ed25519', 'ssh-keygen -lf ~/.ssh/id_rsa', 'ssh-add ~/.ssh/id_ed25519', 'git config --get credential.helper',
+    'git commit -m "ignore .env files"', 'git commit -am "stop reading .env"', `git tag -a v1 -m 'drop .env'`, 'git stash push -m "wip on .env"',
+    `gh pr create --title "Ignore .env" --body "never commit .env"`, 'gh issue comment 3 -b ".env is in .gitignore"'])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+  for (const c of ['ssh host cat ~/.ssh/id_rsa', 'less -i ~/.ssh/id_rsa', 'git commit -F .env', 'git commit -t .env', 'gh pr create --body-file .env',
+    'git commit -m "$(cat .env)"', 'git commit -m "x" && cat .env', 'echo -m "see .env"', 'git config --get credential.username'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+})
+
 test('a jq filter that reads jq\'s env prints the whole environment', () => {
   for (const c of ['jq -n env', `jq -n '$ENV'`, `jq -rn 'env.GITHUB_TOKEN'`, 'jq -n "env"', `jq '{t: env.TOKEN}' a.json`, `jq -n '"\\(env.HOME)"'`])
     expect(secretCommand(c, HOME)).toBeDefined()
