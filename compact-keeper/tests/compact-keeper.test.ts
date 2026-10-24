@@ -94,6 +94,23 @@ test('where session.compact never runs, a compaction is saved once the conversat
   expect(s.writes).toHaveLength(2)
 })
 
+test('a compaction no turn has checked yet is saved when the session ends, but not on a resume', async ($, on) => {
+  const s = engine($, on)
+  await s.turn()
+  await $.command.run({ ...RUN, command: 'compact', args: '' })
+  s.compact('summary')
+  // /clear ends the session before it empties the conversation.
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]).toContain('(manual)')
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
+
+  s.compact('another conversation')
+  await $.session.end({ reason: 'resume', sessionId: 's', resume: { id: 's' } })
+  expect(s.writes).toHaveLength(1)
+})
+
 test('a compaction session.compact saved is not saved again by the late check', async ($, on) => {
   const s = engine($, on)
   on('session.compact', () => ({ messages: [msg('summary')] }))
