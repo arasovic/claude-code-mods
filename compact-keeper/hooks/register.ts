@@ -67,8 +67,9 @@ let seenFirst: string | undefined
 let handled = false
 
 async function check($: EngineInterface, trigger: string, instructions?: string) {
-  const messages = await $.session.messages()
-  const first = messages[0]?.text
+  // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
+  const block = (await $.session.messages({ as: 'api' }))[0]?.content.find(b => b.type === 'text')
+  const first = typeof block?.text === 'string' ? block.text : undefined
   const compacted = seenFirst !== undefined && first !== undefined && first !== seenFirst
   const saved = handled
   seenFirst = first
