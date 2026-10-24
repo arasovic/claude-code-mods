@@ -246,6 +246,27 @@ test('a file write, shell command or MCP call that would write a hidden-value ta
   expect(writesPlaceholder('Write', { file_path: 'README.md', content: `shows ${tag('<rule>')} tags` })).toBe(false)
 })
 
+test('env and typeset without a command, decrypt tools, vault reads and one printed secret variable are caught', () => {
+  for (const c of ['env -0', 'env -u PATH', 'env FOO=bar', `env FOO='a b' -u X`, '/usr/bin/env --null', 'typeset', 'typeset -p', 'declare -px',
+    'declare', 'declare -p GITHUB_TOKEN', `typeset -m '*TOKEN*'`, 'sops -d secrets.yaml', 'sops --decrypt s.yaml', 'sops decrypt s.yaml',
+    'age -d -i key.txt s.age', 'age --decrypt -i k s.age', 'gpg -d s.gpg', 'gpg --decrypt s.gpg', 'gpg -qd s.gpg', 'gpg2 --export-secret-keys --armor',
+    'ansible-vault view vault.yml', 'ansible-vault decrypt vault.yml', 'pass show github', 'pass github', 'pass grep token', 'pass generate web 20',
+    'pass otp github', 'gcloud secrets versions access latest --secret=db', 'az keyvault secret show --name x --vault-name v',
+    'az keyvault secret download --name x --file f', 'print $GITHUB_TOKEN', 'print -r -- "$API_KEY"', 'cat <<< $GITHUB_TOKEN', `base64 <<< "$NPM_TOKEN"`,
+    'node -p process.env.GITHUB_TOKEN', `node -p 'process.env["API_KEY"]'`, `node -e 'console.log(process.env.GITHUB_TOKEN)'`,
+    `python3 -c 'print(os.environ["GITHUB_TOKEN"])'`, `python3 -c "import os; print(os.getenv('API_KEY'))"`,
+    `python3 -c 'import os,sys; sys.stdout.write(os.environ.get("DB_PASSWORD"))'`, `ruby -e 'puts ENV["SECRET_KEY_BASE"]'`,
+    'ls .env | xargs cat', 'cat $(ls .env)', 'cat `ls ~/.ssh/id_rsa`'])
+    expect(secretCommand(c, HOME)).toBeDefined()
+  for (const c of ['env FOO=bar node x', 'env -i node x', 'env -u PATH make', 'declare x=1', 'declare -a list=(a b)', 'typeset -U path',
+    'sops -e -i s.yaml', 'age -r age1x -o s.age s.txt', 'gpg --verify s.sig', 'gpg --list-secret-keys', 'gpg --detach-sign a.txt',
+    'ansible-vault encrypt v.yml', 'pass', 'pass ls', 'pass -c github', 'pass show -c github', 'pass generate -c web 20', 'pass insert github',
+    'pass git push', 'pass --help', 'gcloud secrets list', 'az keyvault secret list --vault-name v', 'print hello', 'node -p process.env.HOME',
+    `node -e 'if (!process.env.GITHUB_TOKEN) console.log("missing")'`, `node -e 'console.log(!!process.env.GITHUB_TOKEN)'`,
+    `mkdir -p x && node -e 'if (process.env.GITHUB_TOKEN) run()'`, `python3 -c 'print(os.environ.get("TOKENIZERS_PARALLELISM"))'`,'test -f .env || cp .env.example .env', 'ls -la .env && echo ok'])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+})
+
 test('a check that fails after the tool started withholds the output and says the tool may have run', async ($, on) => {
   on('tool.call', () => { throw new Error('beneath') })
   const r = await $.tool.call({ tool: 'Bash', command: 'git status' })
