@@ -89,10 +89,18 @@ test('browser profiles, password managers and named kubeconfigs are credential f
     '/mnt/c/Users/me/AppData/Local/Microsoft/Edge/User Data/Default/Network/Cookies',
     'C:\\Users\\me\\AppData\\Local\\Microsoft\\Edge\\User Data\\Default\\Login Data', '/mnt/c/Users/me/AppData/Local/Google/Chrome/User Data/Local State',
     '/mnt/c/Users/me/AppData/Roaming/Mozilla/Firefox/Profiles/x.default/logins.json', '~/.mozilla/firefox/x.default/key4.db',
-    '~/vault.kdbx', '~/.password-store/github.gpg', '~/.config/Bitwarden/data.json', '~/.kube/config-prod'])
+    '~/vault.kdbx', '~/.password-store/github.gpg', '~/.config/Bitwarden/data.json', '~/.kube/config-prod', '~/.password-store', '~/.config/1Password',
+    '~/Library/Application Support/Bitwarden/data.json', '~/Library/Containers/com.bitwarden.desktop/Data/Library/Application Support/Bitwarden',
+    '~/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data/1password.sqlite',
+    '$APPDATA/Bitwarden/data.json', '%APPDATA%\\Bitwarden\\data.json', '${LOCALAPPDATA}/1Password/data/1password.sqlite',
+    'C:\\Users\\me\\AppData\\Local\\1Password\\data', '~/.var/app/com.bitwarden.desktop/config/Bitwarden/data.json'])
     expect(sensitivePath(path, HOME)).toBe(true)
-  for (const path of ['src/chrome/cookies.ts', 'extension/chrome/manifest.json', 'docs/firefox/logins.md', '~/.kube/cache/discovery', 'src/edge/web data.ts'])
+  for (const path of ['src/chrome/cookies.ts', 'extension/chrome/manifest.json', 'docs/firefox/logins.md', '~/.kube/cache/discovery', 'src/edge/web data.ts',
+    '~/.password-store-docs', 'docs/bitwarden.md', '$APPDATA/Code/settings.json', 'C:\\Users\\me\\AppData\\Local\\1Password\\app\\8\\1Password.exe'])
     expect(sensitivePath(path, HOME)).toBe(false)
+  for (const c of ['tar czf /tmp/p.tgz ~/.password-store', 'cp -r ~/.config/Bitwarden /tmp/b', 'cat /proc/$(pgrep node)/environ',
+    'cat "$HOME/Library/Group Containers/2BUA8C4S2C.com.1password/Library/Application Support/1Password/Data/1password.sqlite"'])
+    expect(secretCommand(c, HOME)).toBeDefined()
 })
 
 test('a quoted browser path with spaces is read as one path, a quoted sentence is not', () => {
