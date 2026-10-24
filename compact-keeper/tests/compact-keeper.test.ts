@@ -70,8 +70,11 @@ test('where session.compact never runs, a compaction is saved once the conversat
   await s.turn()
   expect(s.writes).toEqual([])
 
-  s.compact('summary one')
+  // Core swaps the conversation after /compact returns, so the save waits for the next turn.
   await $.command.run({ ...RUN, command: 'compact', args: ' keep the plan ' })
+  s.compact('summary one')
+  expect(s.writes).toEqual([])
+  await s.turn()
   expect(s.writes).toHaveLength(1)
   expect(s.writes[0]).toContain('(manual)')
   expect(s.writes[0]).toContain('- Instructions: keep the plan')

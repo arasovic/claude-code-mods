@@ -16,7 +16,7 @@ A short toast names the file once it is saved. Subagent compactions are skipped,
 
 ## Limits
 
-- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. The mod then sees a compaction only after it ran: `/compact` as soon as it ends, any other one at the end of its turn. That file has no token counts, and its trigger reads `auto or plugin` for anything but `/compact`.
+- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. The mod then saves a compaction only at the end of the next reply, so after `/compact` the file appears once your next message is answered. That file has no token counts, and its trigger reads `auto or plugin` for anything but `/compact`.
 
 ## Install
 

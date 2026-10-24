@@ -65,16 +65,20 @@ async function save($: EngineInterface, h: Saved) {
 let seenFirst: string | undefined
 // ponytail: module state, so a reload between a compaction and its check writes that handoff twice.
 let handled = false
+// What /compact was run with: core swaps the conversation only after the command returns, so the next check saves it.
+let typed: { trigger: string; instructions?: string } | undefined
 
-async function check($: EngineInterface, trigger: string, instructions?: string) {
+async function check($: EngineInterface) {
   // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
   const block = (await $.session.messages({ as: 'api' }))[0]?.content.find(b => b.type === 'text')
   const first = typeof block?.text === 'string' ? block.text : undefined
   const compacted = seenFirst !== undefined && first !== undefined && first !== seenFirst
   const saved = handled
+  const run = typed
   seenFirst = first
   handled = false
-  if (compacted && !saved) await save($, { trigger, instructions, summary: first })
+  typed = undefined
+  if (compacted && !saved) await save($, { trigger: run?.trigger ?? 'auto or plugin', instructions: run?.instructions, summary: first })
 }
 
 export const register: Register = on => {
@@ -96,21 +100,22 @@ export const register: Register = on => {
     return result
   })
 
-  // /compact, typed or run by a plugin, is checked as soon as it is done; any other compaction at the end of its turn.
+  // A compaction is saved at the end of the next main turn; /compact, typed or run by a plugin, only leaves its label.
   on('command.run', { command: 'compact' }, async ($, e, next) => {
     const result = await next(e)
-    await check($, e.origin.kind === 'plugin' ? 'plugin' : 'manual', e.args.trim() || undefined).catch(() => {})
+    typed = { trigger: e.origin.kind === 'plugin' ? 'plugin' : 'manual', instructions: e.args.trim() || undefined }
     return result
   })
 
   on('turn.complete', async ($, e, next) => {
-    if (e.agentId === undefined) await check($, 'auto or plugin').catch(() => {})
+    if (e.agentId === undefined) await check($).catch(() => {})
     return next(e)
   })
 
   on('session.end', ($, e, next) => {
     seenFirst = undefined
     handled = false
+    typed = undefined
     return next(e)
   })
 }
