@@ -163,30 +163,42 @@ const shellTokens = (segment: string): string[] | undefined =>
 // The jq options that take values, and how many.
 const JQ_OPTION_VALUES = new Map([['--indent', 1], ['-L', 1], ['--arg', 2], ['--argjson', 2], ['--slurpfile', 2], ['--rawfile', 2]])
 
-// jq reads its first argument that is not an option as a filter, so `jq '.env.PATH' settings.json` names a key, not a file.
-// The filter is dropped and every other word is still read: files, option values and redirect targets. Nothing is dropped with
-// `-f` (the filter comes from a file), with a filter that imports a module (that reads a JSON file), or after an operator other
-// than a redirect, such as a lone `&` that starts a second command.
-export const withoutJqFilter = (segment: string): string => {
-  if (!/^(\S*\/)?jq\s/.test(segment)) return segment
+// jq reads its first argument that is not an option as a filter. None is found with `-f` (the filter comes from a file), or
+// after an operator other than a redirect, such as a lone `&` that starts a second command.
+const jqFilter = (segment: string): { tokens: string[]; index: number } | undefined => {
+  if (!/^(\S*\/)?jq\s/.test(segment)) return undefined
   const tokens = shellTokens(segment)
-  if (!tokens) return segment
+  if (!tokens) return undefined
   let isOptionsEnd = false
   for (let index = 1; index < tokens.length; index++) {
     const token = tokens[index] ?? ''
     if (OPERATOR.test(token)) {
-      if (!/[<>]/.test(token)) return segment
+      if (!/[<>]/.test(token)) return undefined
       index++
     } else if (!isOptionsEnd && token.startsWith('-')) {
       if (token === '--') isOptionsEnd = true
-      else if (token === '--from-file' || /^-[a-zA-Z]*f/.test(token)) return segment
+      else if (token === '--from-file' || /^-[a-zA-Z]*f/.test(token)) return undefined
       else index += JQ_OPTION_VALUES.get(token) ?? 0
     } else {
-      if (/\b(import|include)\b/.test(token)) return segment
-      return tokens.filter((_, tokenIndex) => tokenIndex !== index).join(' ')
+      return { tokens, index }
     }
   }
-  return segment
+  return undefined
+}
+
+// A jq filter names a key, not a file (`jq '.env.PATH' settings.json`), so it is dropped and every other word is still read:
+// files, option values and redirect targets. A filter that imports a module reads a JSON file, so it is kept.
+export const withoutJqFilter = (segment: string): string => {
+  const filter = jqFilter(segment)
+  if (!filter || /\b(import|include)\b/.test(filter.tokens[filter.index] ?? '')) return segment
+  return filter.tokens.filter((_, index) => index !== filter.index).join(' ')
+}
+
+// jq's `env` and `$ENV` hold the whole environment. A key (`.env`) or a string (`"env"`) of that name is not the builtin.
+export const jqReadsEnvironment = (segment: string): boolean => {
+  const filter = jqFilter(segment)
+  const text = filter?.tokens[filter.index]?.replace(QUOTED_PART, (_, single, double) => single ?? double) ?? ''
+  return /(?<![\w.$"])env\b|\$ENV\b/.test(text)
 }
 
 const SHELL_WORD = /(?:[^\s'"\\]|\\[\s\S]|'[^']*'|"(?:[^"\\]|\\[\s\S])*")+/g

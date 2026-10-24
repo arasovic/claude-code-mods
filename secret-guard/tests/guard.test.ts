@@ -196,6 +196,13 @@ test('a jq filter names a key, not a file, while every file jq reads is still ch
     expect(secretCommand(c, HOME)).toBeDefined()
 })
 
+test('a jq filter that reads jq\'s env prints the whole environment', () => {
+  for (const c of ['jq -n env', `jq -n '$ENV'`, `jq -rn 'env.GITHUB_TOKEN'`, 'jq -n "env"', `jq '{t: env.TOKEN}' a.json`, `jq -n '"\\(env.HOME)"'`])
+    expect(secretCommand(c, HOME)).toBeDefined()
+  for (const c of [`jq '.[] | select(.k == "env")' a.json`, 'jq . env.json', `jq '.my_env' a.json`])
+    expect(secretCommand(c, HOME)).toBeUndefined()
+})
+
 test('a write that would put a hidden-value tag into a file is caught', () => {
   expect(writesPlaceholder({ file_path: 'a.ts', content: `const k = "${tag('secret-value')}"` })).toBe(true)
   expect(writesPlaceholder({ file_path: 'a.ts', content: 'clean' })).toBe(false)
