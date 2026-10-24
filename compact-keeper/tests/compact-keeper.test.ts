@@ -56,7 +56,8 @@ function engine(...[$, on]: Parameters<TestBody>) {
   on('session.id', () => ({ value: 'abcdef12' }))
   on('ui.toast', () => ({ value: undefined }))
   let first = 'hello'
-  on('session.messages', () => ({ value: [msg(first)] }))
+  // A compaction replaces the request's first message; the rows form keeps the old one.
+  on('session.messages', (_$, e) => (e.as === 'api' ? { value: [{ role: 'user' as const, content: [{ type: 'text', text: first }] }] } : { value: [msg('hello')] }))
   on('command.run', () => ({ text: '' }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
