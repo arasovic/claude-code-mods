@@ -1,5 +1,5 @@
-// ponytail: split on shell operators outside quotes; sh -c, eval, globs, scripts the model writes and a quote left open across lines
-// pass through. Output scrubbing is the net for those.
+// ponytail: split on shell operators outside quotes; sh -c, eval, quoted globs, scripts the model writes and a quote left open across
+// lines pass through. Output scrubbing is the net for those.
 // A name right before `(` is a function call (`mock.env(on)`), not a file. Quoted text stays one segment, so `grep "(export )?"` is not
 // read as `export`; `$(` and backticks still run a command inside double quotes, so they split there too.
 export const commandSegments = (command: string): string[] => {
@@ -125,6 +125,21 @@ export const withoutDataHeredocs = (command: string): string => {
   return kept.join('\n')
 }
 
+// Drops every heredoc body, for the file system check: a body is data or a script, not paths to look up.
+export const withoutHeredocs = (command: string): string => {
+  const kept: string[] = []
+  let endings: string[] = []
+  for (const line of command.split('\n')) {
+    if (endings.length > 0) {
+      if (line.trim() === endings[0]) endings.shift()
+      continue
+    }
+    endings = [...line.matchAll(HEREDOC)].map(match => match[2] ?? '')
+    kept.push(line)
+  }
+  return kept.join('\n')
+}
+
 // Splits a segment into the words the path check reads. Whitespace, `<`, `>` and `=` split even inside quotes,
 // because a quoted string can hold a command (`bash -c "cat .env"`). Quotes are removed. A backslash outside
 // quotes escapes the next character, so `\.env` is `.env`; inside single quotes it stays, so `'\.env'` is a pattern.
@@ -216,4 +231,45 @@ export const quotedWords = (segment: string): string[] => {
     for (const [, single, double] of token.matchAll(QUOTED_PART)) words.push(...quotedWords(single ?? double ?? ''))
   }
   return words
+}
+
+// The words of a segment with no quote or backslash, split as pathWords splits them. Only in these does the shell expand
+// `*`, `?`, `[` and `{a,b}`.
+export const unquotedWords = (segment: string): Set<string> =>
+  new Set((segment.match(SHELL_WORD) ?? []).filter(token => !/['"\\]/.test(token)).flatMap(token => token.split(/[<>=]/)))
+
+export const isGlob = (word: string) => /[*?[]/.test(word)
+
+// `{a,b}` gives a word per choice, nested too, as bash does; `{1..3}` and a lone brace stay. Undefined past 64 words.
+export const braceWords = (word: string): string[] | undefined => {
+  const words: string[] = []
+  const expand = (text: string): boolean => {
+    for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+      const cuts = [start]
+      let depth = 0
+      for (let index = start; index < text.length; index++) {
+        if (text[index] === '{') depth++
+        else if (text[index] === ',' && depth === 1) cuts.push(index)
+        else if (text[index] === '}' && --depth === 0) {
+          if (cuts.length === 1) break
+          const choices = [...cuts, index].slice(1).map((cut, at) => text.slice((cuts[at] ?? 0) + 1, cut))
+          return choices.every(choice => expand(text.slice(0, start) + choice + text.slice(index + 1)))
+        }
+      }
+    }
+    words.push(text)
+    return words.length <= 64
+  }
+  return expand(word) ? words : undefined
+}
+
+// One path part of a glob as a regex. `*` also matches a leading dot, and `**` is `*`. Undefined for a `[` left open, which
+// the shell reads as itself.
+export const globPart = (part: string): RegExp | undefined => {
+  const source = part.replace(/[.+^$(){}|\\]/g, '\\$&').replace(/\*+/g, '.*').replace(/\?/g, '.').replace(/\[!/g, '[^')
+  try {
+    return new RegExp(`^${source}$`)
+  } catch {
+    return undefined
+  }
 }

@@ -1,6 +1,9 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, FsEntry, Register } from 'claude-code'
 import { ENV_CHECK_TOOL, envCheck, envCheckSpec } from './env-check'
-import { commandSegments, jqReadsEnvironment, pathWords, quotedWords, withoutDataHeredocs, withoutJqFilter } from './shell-read'
+import {
+  braceWords, commandSegments, globPart, isGlob, jqReadsEnvironment, pathWords, quotedWords, unquotedWords, withoutDataHeredocs,
+  withoutHeredocs, withoutJqFilter,
+} from './shell-read'
 
 // Derived from gitleaks' default rules, loosened where key formats change.
 const SECRET_RULES: readonly [string, RegExp][] = [
@@ -154,9 +157,11 @@ const SENSITIVE_PATHS: readonly RegExp[] = [
   /\/environ$/, /\/run\/secrets\//, /\/etc\/shadow$/, /\/etc\/ssh\/ssh_host_[^/]+_key$/,
 ]
 
+const withHome = (path: string, home: string) => path.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home)
+
 export const sensitivePath = (path: string, home: string, rules = SENSITIVE_PATHS): boolean => {
   // `$APPDATA` and `$LOCALAPPDATA` (Git Bash) and their `%…%` forms (cmd) become Windows paths, so the AppData rules see them.
-  const expanded = path.replace(/^(~|\$HOME|\$\{HOME\})(?=\/|$)/, home)
+  const expanded = withHome(path, home)
     .replace(/^(?:\$\{?|%)(local)?appdata(?:\}|%)?(?=[\\/]|$)/i, (_, local) => `C:\\AppData\\${local ? 'Local' : 'Roaming'}`)
   // A backslash separates directories only in a Windows path; elsewhere it is part of a search pattern (`grep '\.env'`).
   const isWindowsPath = /^(?:[a-z]:\\|\\\\)/i.test(expanded)
@@ -253,6 +258,18 @@ const withoutProse = (segment: string, head: string) =>
   : /^gh (issue|pr|release) /.test(head) ? segment.replace(GH_TEXT, '""')
   : segment
 
+// The words a segment reads as files. Undefined when its command only names them; an ssh key or a cp or mv target is left out.
+const readWords = (seg: string, head: string, text: string, passesOutput: boolean): string[] | undefined => {
+  const words = pathWords(withoutJqFilter(text))
+  // The command comes from the head: pathWords splits `ls=1 cat .env` at `=`, so its first word is `ls`.
+  const cmd = head.split(/\s+/)[0] ?? ''
+  if (NON_READING.has(cmd) && !passesOutput && !(cmd === 'ssh-keygen' && /\s-[a-zA-Z]*i/.test(head))) return undefined
+  const keys = sshKeys(words, pathWords(seg).length - pathWords(head).length)
+  const read = words.filter((_, index) => !keys.has(index))
+  // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
+  return cmd === 'cp' || cmd === 'mv' ? read.slice(1, -1) : read
+}
+
 export const secretCommand = (command: string, home: string): string | undefined => {
   // A script that prints the whole environment is printenv by another name.
   const runnable = withoutDataHeredocs(command)
@@ -265,14 +282,8 @@ export const secretCommand = (command: string, home: string): string | undefined
     if (SECRET_COMMANDS.some(r => r.test(head))) return `\`${head.split(/\s+/).slice(0, 3).join(' ')}\` prints secrets`
     if (jqReadsEnvironment(head)) return '`env` in a jq filter prints the whole environment'
     const text = withoutProse(seg, head)
-    const words = pathWords(withoutJqFilter(text))
-    // The command comes from the head: pathWords splits `ls=1 cat .env` at `=`, so its first word is `ls`.
-    const cmd = head.split(/\s+/)[0] ?? ''
-    if (NON_READING.has(cmd) && !passesOutput && !(cmd === 'ssh-keygen' && /\s-[a-zA-Z]*i/.test(head))) continue
-    const keys = sshKeys(words, pathWords(seg).length - pathWords(head).length)
-    const read = words.filter((_, index) => !keys.has(index))
-    // cp and mv read only their sources: a credential file as the target is setup, as the source it could be copied out and read.
-    const sources = cmd === 'cp' || cmd === 'mv' ? read.slice(1, -1) : read
+    const sources = readWords(seg, head, text, passesOutput)
+    if (!sources) continue
     const token = sources.find(w => sensitivePath(withoutTrailingPunctuation(w), home))
     if (token) return `${token} is a credential file`
     // A quoted sentence ends like many paths (`-m "~/.ssh/config: add a host"`), so a whole quoted word is held only to
@@ -314,6 +325,102 @@ function show($: EngineInterface) {
   $.ui.status(statusText(tally))
 }
 
+// A link named like any file can lead to a credential file.
+const leadsToCredentialFile = async ($: EngineInterface, path: string) => {
+  const real = (await $.fs.stat(path, { resolve: true }).catch(() => undefined))?.realPath
+  return real !== undefined && sensitivePath(real, home)
+}
+
+const joinPath = (dir: string, path: string) => path.startsWith('/') || dir === '.' ? path : `${dir.replace(/\/$/, '')}/${path}`
+
+// The words outside quotes that a command reads, as paths: home spelled out, under a plain `cd` before them. A word with `$` or
+// a backtick is left out, an option too, and so is all that echo and printf get, since they open nothing.
+const fileWords = (command: string) => {
+  const runnable = withoutHeredocs(command)
+  const passesOutput = PASSES_OUTPUT.test(runnable)
+  const words: { word: string; path: string }[] = []
+  let dir = '.'
+  for (const seg of commandSegments(runnable)) {
+    const head = commandHead(seg)
+    const cd = /^cd\s+([^\s'"\\$`-][^\s'"\\$`]*)$/.exec(head)
+    if (cd) dir = joinPath(dir, withHome(cd[1] ?? '', home))
+    if (cd || /^(echo|printf)\b/.test(head)) continue
+    const unquoted = unquotedWords(seg)
+    let cmd: string | undefined = pathWords(head)[0]
+    for (const word of readWords(seg, head, withoutProse(seg, head), passesOutput) ?? []) {
+      const path = withHome(word, home)
+      if (word === cmd) cmd = undefined
+      else if (unquoted.has(word) && !word.startsWith('-') && !/[$`]/.test(path)) words.push({ word, path: joinPath(dir, path) })
+    }
+  }
+  return words
+}
+
+const FS_CALLS = 32
+const TOO_MANY = `the command needs more than ${FS_CALLS} file system checks`
+const TOO_MANY_HINT = 'Split it into smaller commands, or name the files instead of a pattern.'
+
+// After the name check: expands the globs and braces the shell would (`cat ~/.aw?/credentials`) and follows links (`cat notes`,
+// where notes leads to .env). The deny names the word typed, never where it leads.
+// ponytail: `**` is one level and `*` also matches a dotfile; past FS_CALLS calls it denies, a split command passes.
+const fileReason = async ($: EngineInterface, command: string): Promise<string | undefined> => {
+  let calls = 0
+  const cache = <T>(map: Map<string, Promise<T | undefined>>, key: string, run: () => Promise<T>) => {
+    const hit = map.get(key)
+    if (hit) return hit
+    if (++calls > FS_CALLS) throw TOO_MANY
+    const made = run().catch(() => undefined)
+    map.set(key, made)
+    return made
+  }
+  const lists = new Map<string, Promise<FsEntry[] | undefined>>()
+  const reals = new Map<string, Promise<string | undefined>>()
+  const list = (dir: string) => cache(lists, dir, () => $.fs.list(dir))
+  const real = (path: string) => cache(reals, path, async () => (await $.fs.stat(path, { resolve: true })).realPath)
+
+  // Walks a glob a folder at a time. A match keeps its entry when the last part was a pattern.
+  const matches = async (pattern: string) => {
+    const parts = pattern.split('/')
+    const first = parts.findIndex(isGlob)
+    let found: { path: string; dir?: string; entry?: FsEntry }[] = [{ path: parts.slice(0, first).join('/') || (pattern.startsWith('/') ? '/' : '.') }]
+    for (const [at, part] of parts.entries()) {
+      if (at < first || part === '') continue
+      const re = isGlob(part) ? globPart(part) : undefined
+      const isLast = at === parts.length - 1
+      const next: typeof found = []
+      for (const { path } of found) {
+        if (!re) next.push({ path: joinPath(path, part) })
+        else for (const entry of (await list(path)) ?? [])
+          if (re.test(entry.name) && (isLast || entry.kind === 'dir' || entry.isLink)) next.push({ path: joinPath(path, entry.name), dir: path, entry })
+      }
+      found = next
+    }
+    return found
+  }
+
+  try {
+    for (const { word, path } of fileWords(command)) {
+      const paths = braceWords(path)
+      if (!paths) return TOO_MANY
+      for (const each of paths) {
+        const isPattern = each !== path || isGlob(each)
+        if (sensitivePath(each, home)) return `${word} ${isPattern ? 'matches' : 'is'} a credential file`
+        for (const { path: found, dir, entry } of isGlob(each) ? await matches(each) : [{ path: each }]) {
+          if (sensitivePath(found, home)) return `${word} matches a credential file`
+          // A plain entry's own path is its folder's, so one stat per folder covers every match in it.
+          const base = entry && !entry.isLink && dir ? await real(dir) : undefined
+          const to = base !== undefined && entry ? joinPath(base, entry.name) : await real(found)
+          if (to !== undefined && sensitivePath(to, home)) return `${word} leads to a credential file`
+        }
+      }
+    }
+  } catch (error) {
+    if (error === TOO_MANY) return TOO_MANY
+    throw error
+  }
+  return undefined
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     home = (await $.env.get('HOME')) ?? ''
@@ -335,12 +442,11 @@ export const register: Register = on => {
     const path = pathKey ? args[pathKey] : undefined
     if (typeof path === 'string') {
       if (sensitivePath(path, home)) return deny(`${path} is a credential file`)
-      const real = (await $.fs.stat(path, { resolve: true }).catch(() => undefined))?.realPath
-      if (real && sensitivePath(real, home)) return deny(`${path} leads to a credential file`)
+      if (await leadsToCredentialFile($, path)) return deny(`${path} leads to a credential file`)
     }
     if (e.tool === 'Bash' && typeof args.command === 'string') {
-      const reason = secretCommand(args.command, home)
-      if (reason) return deny(reason)
+      const reason = secretCommand(args.command, home) ?? await fileReason($, args.command)
+      if (reason) return deny(reason, reason === TOO_MANY ? TOO_MANY_HINT : READ_HINT)
     }
     if (!LOCAL_WRITES.has(e.tool) && scrub(JSON.stringify(args)).rules.length > 0) return deny('this call would send a secret', SEND_HINT)
     if (writesPlaceholder(e.tool, args)) return deny('this call would write a hidden-value tag', WRITE_HINT)
@@ -368,6 +474,15 @@ export const register: Register = on => {
   // Added after the hook above, so its argument check and result scrub run around this one.
   on('tool.call', { tool: ENV_CHECK_TOOL }, ($, e) => envCheck($, home, e as Record<string, unknown>))
     .catch(() => ({ isError: true as const, result: 'env_check failed. Ask the user to check the file.' }))
+
+  // A file added with `@` raises no tool.call. Its deny reason reaches only the debug log, so a toast tells the user.
+  on('prompt.mention', async ($, e, next) => {
+    if (!sensitivePath(e.path, home) && !(await leadsToCredentialFile($, e.path))) return next(e)
+    tally.blocked++
+    show($)
+    $.ui.toast(`@${e.mention} was not attached, because it is a credential file.`)
+    return { deny: 'secret-guard: a credential file' }
+  }).catch(($, e, next) => next.called ? next(e) : { deny: 'secret-guard: the check failed' })
 
   // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
   // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries and Skill messages past this hook.
