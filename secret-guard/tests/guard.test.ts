@@ -128,13 +128,15 @@ test('structured results keep their shape', () => {
   expect(scrubDeep({ a: 'hello', n: 1 }, [])).toEqual({ a: 'hello', n: 1 })
 })
 
-test('a string field named like a secret is hidden whole, a cursor or reference is not', () => {
+test('a string field named like a secret is hidden whole, a cursor, reference or fetch mode is not', () => {
   const found: string[] = []
   const v = 'q7'.repeat(5)
   expect(scrubDeep({ token: v, auth: { basic_auth: v, accessKey: v }, nextPageToken: v, password: 'short', apiKey: '$API_KEY', pin: '12345678', key_file: '~/keys/sa.json' }, found))
     .toEqual({ token: tag('secret-value'), auth: { basic_auth: tag('secret-value'), accessKey: tag('secret-value') }, nextPageToken: v, password: 'short', apiKey: '$API_KEY', pin: '12345678', key_file: '~/keys/sa.json' })
   expect(found).toEqual(['secret-value', 'secret-value', 'secret-value'])
   expect(scrubDeep({ author: v, oauth: v, max_tokens: 4096, tokenizer: v }, [])).toEqual({ author: v, oauth: v, max_tokens: 4096, tokenizer: v })
+  expect(scrubDeep({ credentials: 'same-origin', client: { credentials: v } }, []))
+    .toEqual({ credentials: 'same-origin', client: { credentials: tag('secret-value') } })
 })
 
 test('credential files are recognised, templates and public keys are not', () => {
