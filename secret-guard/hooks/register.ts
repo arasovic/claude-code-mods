@@ -88,11 +88,12 @@ export const scrub = (text: string): { text: string; rules: string[] } => {
   return { text: out, rules }
 }
 
-// A string field named like a secret is hidden whole. Paging cursors are named like tokens but are not secrets.
+// A string field named like a secret is hidden whole. Paging cursors are named like tokens but are not secrets, and neither is
+// fetch's `credentials: 'same-origin'` (its other modes, omit and include, are too short to hide).
 const SECRET_FIELD = /(?:secret|token|password|passwd|api_?key|access_?key|private_?key|credentials?|(?:^|[_-])auth|[_-]pwd)$/i
 const CURSOR_FIELD = /(?:page|pagination|next|sync|continuation)_?token$/i
 const secretField = (key: string, value: unknown) =>
-  typeof value === 'string' && SECRET_FIELD.test(key) && !CURSOR_FIELD.test(key) &&
+  typeof value === 'string' && SECRET_FIELD.test(key) && !CURSOR_FIELD.test(key) && value !== 'same-origin' &&
   /^[^\s$<{]{8,}$/.test(value) && !/^\d+$/.test(value) && hideable(value)
 
 // Rewrites every string inside a value, keeping its shape.
