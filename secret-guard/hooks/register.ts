@@ -1,4 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
+import { ENV_CHECK_TOOL, envCheck, envCheckSpec } from './env-check'
 import { commandSegments, jqReadsEnvironment, pathWords, quotedWords, withoutDataHeredocs, withoutJqFilter } from './shell-read'
 
 // Derived from gitleaks' default rules, loosened where key formats change.
@@ -293,7 +294,7 @@ export const writesPlaceholder = (tool: string, args: Record<string, unknown>) =
   (LOCAL_WRITES.has(tool) || tool === 'Bash' || tool.startsWith('mcp__')) &&
   EMITTED_TAG.test(JSON.stringify(tool === 'Bash' ? { ...args, description: undefined } : args))
 
-const READ_HINT = 'Do not try another way to read it. Use a template such as .env.example, or ask the user to run the step and share only what is safe.'
+const READ_HINT = `Do not try another way to read it. To learn whether a .env-style file sets a variable, call ${ENV_CHECK_TOOL} (load it with ToolSearch first), which never shows the value. Otherwise use a template such as .env.example, or ask the user to run the step and share only what is safe.`
 const SEND_HINT = 'Take the secret out of the call. If the step needs it, ask the user to run it themselves.'
 const FAILED_HINT = 'Do not retry it the same way. Tell the user, who can run the step themselves.'
 const RAN_HINT = 'Do not run it again. Check its effect another way, or tell the user it may have run.'
@@ -318,6 +319,7 @@ export const register: Register = on => {
     home = (await $.env.get('HOME')) ?? ''
     tally.scrubOff = (await $.env.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB')) !== '1'
     show($)
+    await $.tool.register(envCheckSpec)
     return next(e)
   })
 
@@ -362,6 +364,10 @@ export const register: Register = on => {
       ? { deny: `secret-guard: the check failed after the call started. It may have run; its output was withheld. ${RAN_HINT}` }
       : { deny: `secret-guard: the check failed, so the call was refused before it ran. ${FAILED_HINT}` }
   })
+
+  // Added after the hook above, so its argument check and result scrub run around this one.
+  on('tool.call', { tool: ENV_CHECK_TOOL }, ($, e) => envCheck($, home, e as Record<string, unknown>))
+    .catch(() => ({ isError: true as const, result: 'env_check failed. Ask the user to check the file.' }))
 
   // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
   // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries and Skill messages past this hook.
