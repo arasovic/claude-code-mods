@@ -32,8 +32,8 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 - The mod looks up the globs, braces and links of a shell command in the file system. This check has limits:
   - It reads only words with no quote or backslash. A quoted or escaped glob, or a quoted link, is not looked up. A credential file name in it is still blocked.
   - It does not look into heredoc bodies, `bash -c "…"` text, or what `echo` and `printf` print.
-  - A relative path is looked up in the session's folder, or after a plain `cd <folder>` earlier in the command. A `cd` with a quote or a `$` sends the check to the wrong folder.
-  - `**` matches one folder level, like `*`. `*` also matches a dotfile, so `cat *` checks `.env` too.
+  - A relative path is looked up in the shell's current folder, so a `cd` in an earlier command counts. A plain `cd <folder>` earlier in the same command counts too, but a `cd` there with a quote or a `$` sends the check to the wrong folder.
+  - `**` matches one folder level, like `*`. As in the shell, `*` skips a dotfile, so `cat *` does not check `.env`, but `cat .*` does. When the command may turn on dotglob (`shopt`, `set`, `setopt`, `eval`, `source`, `GLOBIGNORE`, or zsh's `*(D)`), `*` matches a dotfile too. The check assumes your shell profile does not turn dotglob on.
   - A path with `$` or a backtick, other than a leading `$HOME`, is not looked up.
   - A command that needs more than 32 file system calls is refused. Split it, or name the files instead of a pattern.
 - A script Claude writes and runs (`python -c …`, `node -e …`) can open any file. The mod cannot see what it opens; it hides known key formats in the output, nothing more.

@@ -263,12 +263,12 @@ export const braceWords = (word: string): string[] | undefined => {
   return expand(word) ? words : undefined
 }
 
-// One path part of a glob as a regex. `*` also matches a leading dot, and `**` is `*`. Undefined for a `[` left open, which
-// the shell reads as itself.
-export const globPart = (part: string): RegExp | undefined => {
+// One path part of a glob as a regex. Like the shell, only a part that starts with a dot matches a dotfile, unless `dots` says
+// dotglob is on. `**` is `*`. Undefined for a `[` left open, which the shell reads as itself.
+export const globPart = (part: string, dots = false): RegExp | undefined => {
   const source = part.replace(/[.+^$(){}|\\]/g, '\\$&').replace(/\*+/g, '.*').replace(/\?/g, '.').replace(/\[!/g, '[^')
   try {
-    return new RegExp(`^${source}$`)
+    return new RegExp(`^${dots || part.startsWith('.') ? '' : '(?!\\.)'}${source}$`)
   } catch {
     return undefined
   }
