@@ -359,11 +359,21 @@ const fileWords = (command: string) => {
 const FS_CALLS = 32
 const TOO_MANY = `the command needs more than ${FS_CALLS} file system checks`
 const TOO_MANY_HINT = 'Split it into smaller commands, or name the files instead of a pattern.'
+// What may let `*` match a dotfile: a command that can change shell options, whatever it sets (`shopt -s dotglob`, zsh's
+// `setopt globdots` or `set -4`, `eval`, a sourced file, or a command name that is not a plain word, after `then`, `{` or a
+// precommand such as `noglob` too), an option name anywhere, a GLOBIGNORE, or a zsh D qualifier such as `*(D)`. Names are matched
+// with quotes, backslashes and underscores taken out, since zsh ignores underscores and case in option names.
+const OPTION_COMMAND = new RegExp(String.raw`^(?:(?:if|then|else|elif|do|while|until|!|\{|noglob|nocorrect|-|command|exec|time|nohup|sudo)\s+)*`
+  + String.raw`(?:(?:set|setopt|unsetopt|shopt|emulate|eval|source|builtin)\b|\.\s|[$'"\\\x60])`)
+const DOT_GLOB = /dotglob|globdots|globignore|[*?\]]\([^()|]*D/i
+const dotGlob = (command: string) =>
+  DOT_GLOB.test(command.replace(/['"\\_]/g, '')) || commandSegments(command).some(seg => OPTION_COMMAND.test(commandHead(seg)))
 
 // After the name check: expands the globs and braces the shell would (`cat ~/.aw?/credentials`) and follows links (`cat notes`,
 // where notes leads to .env). The deny names the word typed, never where it leads.
-// ponytail: `**` is one level and `*` also matches a dotfile; past FS_CALLS calls it denies, a split command passes.
+// ponytail: `**` is one level; past FS_CALLS calls it denies, a split command passes.
 const fileReason = async ($: EngineInterface, command: string): Promise<string | undefined> => {
+  const dots = dotGlob(command)
   let calls = 0
   const cache = <T>(map: Map<string, Promise<T | undefined>>, key: string, run: () => Promise<T>) => {
     const hit = map.get(key)
@@ -385,7 +395,7 @@ const fileReason = async ($: EngineInterface, command: string): Promise<string |
     let found: { path: string; dir?: string; entry?: FsEntry }[] = [{ path: parts.slice(0, first).join('/') || (pattern.startsWith('/') ? '/' : '.') }]
     for (const [at, part] of parts.entries()) {
       if (at < first || part === '') continue
-      const re = isGlob(part) ? globPart(part) : undefined
+      const re = isGlob(part) ? globPart(part, dots) : undefined
       const isLast = at === parts.length - 1
       const next: typeof found = []
       for (const { path } of found) {

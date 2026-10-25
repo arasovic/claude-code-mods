@@ -59,6 +59,14 @@ test('a glob or a brace that matches a credential file is refused', async ($, on
   expect(await bash('cat /w/.{env,bashrc}')).toContain('/w/.{env,bashrc} matches a credential file')
   expect(calls).toEqual([])
   expect(await bash('cat /w/src/*.ts /w/*.example')).toBeUndefined()
+  // Like the shell, `*` skips a dotfile; only a part that starts with a dot reaches one.
+  expect(await bash('cat ~/*/credentials')).toBeUndefined()
+  expect(await bash('cat ~/.*/credentials')).toContain('~/.*/credentials matches a credential file')
+  // Unless the command may turn dotglob on: an option command, a command name that is not a plain word, GLOBIGNORE, `*(D)`.
+  for (const command of ['set -4; cat ~/*/credentials', 'if true; then noglob set -4; fi; cat ~/*/credentials', String.raw`$'\x73etopt' -4; cat ~/*/credentials`,
+    'export GLOB"IGNORE"=x; cat ~/*/credentials', 'zsh -o GLOB_DOTS -c true; cat ~/*/credentials'])
+    expect(await bash(command)).toContain('~/*/credentials matches a credential file')
+  expect(await bash('cd /w && cat *(D)')).toContain('* matches a credential file')
 })
 
 test('a link, or a folder reached through one, that leads to a credential file is refused', async ($, on) => {
