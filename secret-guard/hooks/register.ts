@@ -1,5 +1,5 @@
 import type { EngineInterface, FsEntry, Register } from 'claude-code'
-import { ENV_CHECK_TOOL, envCheck, envCheckSpec } from './env-check'
+import { ENV_CHECK_TOOL, ENV_PATHS, envCheck, envCheckSpec } from './env-check'
 import {
   braceWords, commandSegments, globPart, isGlob, jqReadsEnvironment, pathWords, quotedWords, unquotedWords, withoutDataHeredocs,
   withoutHeredocs, withoutJqFilter,
@@ -132,9 +132,7 @@ const SPACED_PATHS: readonly RegExp[] = [
 
 // Matched against the lowercased path with forward slashes and a leading slash.
 const SENSITIVE_PATHS: readonly RegExp[] = [
-  // `name.env` files, but not the code spellings a search names (`grep -rn process.env src`).
-  /\/\.env$/, /\/\.env\.(?!(example|sample|template|defaults|dist)$)[^/]+$/, /\/(?!(process|import\.meta|c)\.env$)[^/\\]+\.env$/,
-  /\/\.envrc$/, /\/\.dev\.vars(\.[^/]+)?$/, /\/\.flaskenv$/,
+  ...ENV_PATHS,
   /\/\.(aws|gem|cargo|config\/git)\/credentials(\.toml)?$/, /\/credentials\.json$/, /\/service-account[^/]*\.json$/, /\/\.vault-token$/, /\/\.vault_pass$/,
   // A bare `e.key` or `event.key` in a command is code reading a field (`store.get(e.key)`), not a key file; a path to one still counts.
   /^(?!\/([a-z]|this|self|event|evt|entry|item|node|props|row|pair|kv|obj)\.key$).*\.(key|p12|pfx|jks|keystore|ppk)$/,
