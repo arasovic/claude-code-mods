@@ -69,11 +69,13 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 - The quoted text of a git `-m` message and of a gh `--title`, `--body` or `--notes` is not read, so `git commit -m "ignore .env files"` runs. A message or body file (`-F`, `--body-file`) is still read, and so is quoted text with `$` or a backtick in it.
 - Commands that touch a credential file without printing it still run: `ls`, `stat`, `test` / `[`, `touch`, `chmod`, `chown`, `rm`, `ssh-keygen` (but not `-i`, which prints a private key), `ssh-add`, and `ssh`, `scp` or `sftp` with a key given by `-i` or `IdentityFile` before the host (in `GIT_SSH_COMMAND` too). In a command with a pipe, `$(…)` or a backtick they are read like any other, because the file name they print can reach a command that opens it (`ls .env | xargs cat`). `cp` and `mv` run when the credential file is the target (`cp .env.example .env`), not when it is the source, so a file cannot be copied to a new name and read there.
 - `env_check` has these limits:
-  - `set` means only that the line has a value. A placeholder copied from the template, such as `API_KEY=your-key-here`, is `set` too. If a service fails, check the value yourself.
+  - `set` means only that the line has a value. A placeholder copied from the template, such as `API_KEY=your-key-here`, is `set` too. The answer says this whenever a name is `set`. If a service fails, check the value yourself.
   - It does not compare values with the template. Otherwise Claude could guess a value by changing the template.
   - `X=""` and `X='  '` are `empty`. A line without `=` is not read.
+  - As in a shell, a `#` starts a comment only after a space: `X= # note` is `empty`, `X=#abc` is `set`. Node's dotenv reads `X=#abc` as empty.
   - When Claude gives no names, the tool lists the names in the file and in the template. It lists only names in capitals, such as `API_KEY`.
-  - It reads only `.env`, `.env.*`, `*.env`, `.dev.vars`, `.envrc` and `.flaskenv` files. A template can also be one of these names with `.example`, `.sample` or `.template` added.
+  - It reads only the env files that secret-guard blocks: `.env`, `.env.*`, `*.env`, `.dev.vars`, `.envrc` and `.flaskenv`. A template is one of these names with `.example`, `.sample`, `.template`, `.defaults` or `.dist` added. It is given as the template, not as the file.
+  - The answer shows a path as Claude typed it, so `~/app/.env` does not show your home folder.
   - It follows a link only to one of these files. When it cannot tell where a link leads, it does not read the file.
 - The screen can show a row for a moment before it is rewritten. Claude and the transcript only read the hidden form.
 - A value hidden in source code, such as a test token, is hidden from Claude as well. Claude can still edit the other lines of that file. A file write, shell command or MCP call that would put a `[secret-guard: <rule>]` tag back is refused, so the real value is never overwritten; Claude will ask you to change that line.
