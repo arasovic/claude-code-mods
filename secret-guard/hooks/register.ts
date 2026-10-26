@@ -494,11 +494,14 @@ export const register: Register = (on, options) => {
   }).catch(($, e, next) => next.called ? next(e) : { deny: 'secret-guard: the check failed' })
 
   // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
-  // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries, Skill messages and some notes past
-  // this hook, and Claude Code says so once a session. skipBypassedRows leaves those doors out, so the notice stops; on a
-  // setup where it is not seated, those rows then go unscrubbed.
+  // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries, Skill messages and the notes of
+  // prepend- and append-tier plugins past this hook, and Claude Code says so once a session. skipBypassedRows leaves those
+  // rows out, so the notice stops; on a setup where it is not seated, they then go unscrubbed. Claude Code picks the hooks
+  // it tells of by a matcher's literal values only, a RegExp counting as a match, so every tool message stays out, not
+  // only Skill's. A note's row does not name its plugin's tier, so notes stay in: a managed plugin that appends notes
+  // brings the notice back (no built-in one does).
   const doors: { door?: readonly SessionAppendDoor[] } = options.skipBypassedRows === true
-    ? { door: ['prompt', 'command', 'response', 'tool-result', 'delivery', 'notice', 'queue'] }
+    ? { door: ['prompt', 'command', 'response', 'tool-result', 'delivery', 'note', 'notice', 'queue'] }
     : {}
   on('session.append', doors, ($, e, next) => {
     const found: string[] = []

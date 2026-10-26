@@ -22,7 +22,7 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
 
 When Claude Code's "Security default" plugin runs first (see Limits), Claude Code says once a session that secret-guard's `session.append` hook was skipped. To stop that notice, turn on **Skip rows Security default sends past** in `/config` (the `skipBypassedRows` option). The mod then stops checking the rows Security default sends past it.
 
-Turn it on only on a Team or Enterprise plan or with managed settings. On any other setup, secrets in files added with `@`, conversation summaries, hook notes and other attachments then stop being hidden. On every setup, some tool messages and plugin notes go unhidden too.
+Turn it on only on a Team or Enterprise plan or with managed settings. On any other setup, secrets in files added with `@`, conversation summaries, hook notes, skill text and other attachments then stop being hidden. On every setup, messages that other tools add go unhidden too. If a plugin your organization manages adds notes to the conversation, the notice can come back.
 
 ## Limits
 
