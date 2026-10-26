@@ -492,9 +492,9 @@ export const register: Register = on => {
     return { deny: 'secret-guard: a credential file' }
   }).catch(($, e, next) => next.called ? next(e) : { deny: 'secret-guard: the check failed' })
 
-  // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
-  // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries and Skill messages past this hook.
-  on('session.append', ($, e, next) => {
+  // Every other row: prompts typed or pasted, model output, error results. The doors left out (attachment,
+  // hook-context, note, compaction, tool-message) are ones a seated cc-plugin-sec-default sends past this hook anyway.
+  on('session.append', { door: ['prompt', 'command', 'response', 'tool-result', 'delivery', 'notice', 'queue'] }, ($, e, next) => {
     const found: string[] = []
     const content = scrubDeep(e.message.content, found)
     if (found.length === 0) return next(e)
