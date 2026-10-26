@@ -365,7 +365,7 @@ test('the status line shows the worst thing that happened', () => {
   expect(statusText({ hidden: 0, blocked: 1, scrubOff: false })).toBe('🔴 secrets: none seen, 1 blocked')
 })
 
-const appended = async ($: Engine, door: 'prompt' | 'attachment') => JSON.stringify(await $.session.append({
+const appended = async ($: Engine, door: 'prompt' | 'attachment' | 'tool-message' | 'note') => JSON.stringify(await $.session.append({
   message: { type: 'user', role: 'user', content: [{ type: 'text', text: `key ${AWS}` }] },
   door,
   origin: { kind: 'tool', tool: 'Read' },
@@ -379,5 +379,7 @@ test('a key is hidden on every door by default', async $ => {
 
 test('skipBypassedRows leaves only the doors Security default skips unhidden', { options: { skipBypassedRows: true } }, async $ => {
   expect(await appended($, 'attachment')).toContain(AWS)
+  expect(await appended($, 'tool-message')).toContain(AWS)
   expect(await appended($, 'prompt')).not.toContain(AWS)
+  expect(await appended($, 'note')).not.toContain(AWS)
 })

@@ -9,7 +9,7 @@
     "skipBypassedRows": {
       "type": "boolean",
       "title": "Skip rows Security default sends past",
-      "description": "Stops the \"session.append hook was skipped\" notice by not checking the rows Claude Code's Security default sends past secret-guard. Turn it on only on a Team or Enterprise plan or with managed settings: elsewhere secrets in files added with @, summaries and hook notes stop being hidden. Some tool messages and plugin notes go unhidden on every setup.",
+      "description": "Stops the \"session.append hook was skipped\" notice by not checking the rows Claude Code's Security default sends past secret-guard. Turn it on only on a Team or Enterprise plan or with managed settings: elsewhere secrets in files added with @, summaries, hook notes and skill text stop being hidden. Messages that other tools add go unhidden on every setup. A plugin your organization manages that adds notes to the conversation can bring the notice back.",
       "required": false,
       "default": false
     }
