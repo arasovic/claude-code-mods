@@ -28,7 +28,7 @@ Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settin
   - skill text
   - other attachments, such as an IDE selection
 
-  This happens on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. Your prompts, pasted text, Claude's replies and tool results are still hidden, and the blocks still hold.
+  This happens on Team and Enterprise plans and on a machine with managed settings. Your prompts, pasted text, Claude's replies and tool results are still hidden, and the blocks still hold.
 - The mod looks up the globs, braces and links of a shell command in the file system. This check has limits:
   - It reads only words with no quote or backslash. A quoted or escaped glob, or a quoted link, is not looked up. A credential file name in it is still blocked.
   - It does not look into heredoc bodies, `bash -c "…"` text, or what `echo` and `printf` print.

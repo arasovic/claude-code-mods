@@ -35,7 +35,7 @@ Subagent requests do not count; they do not keep the main conversation's cache a
 - Some accounts have a server-side feature that renews the cache while you are away. When it is on, the cache lives longer than the timer shows. A mod cannot see whether it is on.
 - Switching models with `/model` drops the cache; the timer does not know until the next reply.
 - After `claude --resume` the line stays empty until the first reply.
-- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans, on a machine with managed settings, and in the desktop app unless you use a personal Pro or Max plan. Then only `/compact` clears the line at once. After an automatic compaction the next request restarts the count anyway. A compaction while the session is idle, or one a plugin runs in the terminal, can leave the old count until your next message.
+- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans and on a machine with managed settings. Then only `/compact` clears the line at once. After an automatic compaction the next request restarts the count anyway. A compaction while the session is idle, or one a plugin runs in the terminal, can leave the old count until your next message.
 
 ## Install
 
