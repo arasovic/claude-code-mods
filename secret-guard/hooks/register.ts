@@ -1,4 +1,4 @@
-import type { EngineInterface, FsEntry, Register } from 'claude-code'
+import type { EngineInterface, FsEntry, Register, SessionAppendDoor } from 'claude-code'
 import { ENV_CHECK_TOOL, ENV_PATHS, envCheck, envCheckSpec } from './env-check'
 import {
   braceWords, commandSegments, globPart, isGlob, jqReadsEnvironment, pathWords, quotedWords, unquotedWords, withoutDataHeredocs,
@@ -429,7 +429,7 @@ const fileReason = async ($: EngineInterface, command: string): Promise<string |
   return undefined
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     home = (await $.env.get('HOME')) ?? ''
     tally.scrubOff = (await $.env.get('CLAUDE_CODE_SUBPROCESS_ENV_SCRUB')) !== '1'
@@ -492,9 +492,14 @@ export const register: Register = on => {
     return { deny: 'secret-guard: a credential file' }
   }).catch(($, e, next) => next.called ? next(e) : { deny: 'secret-guard: the check failed' })
 
-  // Every other row: prompts typed or pasted, model output, error results. The doors left out (attachment,
-  // hook-context, note, compaction, tool-message) are ones a seated cc-plugin-sec-default sends past this hook anyway.
-  on('session.append', { door: ['prompt', 'command', 'response', 'tool-result', 'delivery', 'notice', 'queue'] }, ($, e, next) => {
+  // Every other row: prompts typed or pasted, model output, attachments, compaction summaries, error results.
+  // A seated cc-plugin-sec-default sends attachments, hook context, compaction summaries, Skill messages and some notes past
+  // this hook, and Claude Code says so once a session. skipBypassedRows leaves those doors out, so the notice stops; on a
+  // setup where it is not seated, those rows then go unscrubbed.
+  const doors: { door?: readonly SessionAppendDoor[] } = options.skipBypassedRows === true
+    ? { door: ['prompt', 'command', 'response', 'tool-result', 'delivery', 'notice', 'queue'] }
+    : {}
+  on('session.append', doors, ($, e, next) => {
     const found: string[] = []
     const content = scrubDeep(e.message.content, found)
     if (found.length === 0) return next(e)
