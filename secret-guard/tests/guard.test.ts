@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, test, type Engine } from 'claude-code/testing'
 
 import { scrub, scrubDeep, secretCommand, sensitivePath, statusText, withheld, writesPlaceholder } from '../hooks/register'
 
@@ -361,4 +361,21 @@ test('the status line shows the worst thing that happened', () => {
   expect(statusText({ hidden: 0, blocked: 0, scrubOff: false })).toBe('🟢 secrets: none seen')
   expect(statusText({ hidden: 2, blocked: 0, scrubOff: true })).toBe('🟡 secrets: 2 hidden · env scrub off')
   expect(statusText({ hidden: 0, blocked: 1, scrubOff: false })).toBe('🔴 secrets: none seen, 1 blocked')
+})
+
+const appended = async ($: Engine, door: 'prompt' | 'attachment') => JSON.stringify(await $.session.append({
+  message: { type: 'user', role: 'user', content: [{ type: 'text', text: `key ${AWS}` }] },
+  door,
+  origin: { kind: 'tool', tool: 'Read' },
+  uuid: `row-${door}`,
+}))
+
+test('a key is hidden on every door by default', async $ => {
+  expect(await appended($, 'attachment')).not.toContain(AWS)
+  expect(await appended($, 'prompt')).not.toContain(AWS)
+})
+
+test('skipBypassedRows leaves only the doors Security default skips unhidden', { options: { skipBypassedRows: true } }, async $ => {
+  expect(await appended($, 'attachment')).toContain(AWS)
+  expect(await appended($, 'prompt')).not.toContain(AWS)
 })

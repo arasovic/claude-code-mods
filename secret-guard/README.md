@@ -18,6 +18,12 @@ Keeps secrets out of the conversation. API keys and private keys are hidden befo
 
 Set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` in the `env` block of `~/.claude/settings.json`. Claude Code then removes its own credentials from the environment of the commands it runs, so there is nothing for a command to print. The mod cannot set this for you; the status light shows when it is off.
 
+## Stop the skipped-hook notice
+
+When Claude Code's "Security default" plugin runs first (see Limits), Claude Code says once a session that secret-guard's `session.append` hook was skipped. To stop that notice, turn on **Skip rows Security default sends past** in `/config` (the `skipBypassedRows` option). The mod then stops checking the rows Security default sends past it.
+
+Turn it on only on a Team or Enterprise plan or with managed settings. On any other setup, secrets in files added with `@`, conversation summaries, hook notes and other attachments then stop being hidden. On every setup, some tool messages and plugin notes go unhidden too.
+
 ## Limits
 
 - On some setups, Claude Code's built-in "Security default" plugin runs before the mod and sends some rows past it. Secrets in these rows reach Claude and the transcript unhidden:
