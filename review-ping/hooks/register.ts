@@ -23,6 +23,7 @@ export const register: Register = on => {
   // A review covers the next commit, even with edits in between; every commit clears it.
   let isReviewed = false
   // A review run while a note waits answers that note: it looks back at the noted commit, so it covers nothing ahead.
+  // A note waits until the next commit, so a skipped note cannot eat a later review.
   let isNoted = false
   const review = () => {
     if (isNoted) isNoted = false
@@ -55,7 +56,7 @@ export const register: Register = on => {
     const commit = committed(r.result.stdout)
     if (!commit) return r
     const wasReviewed = isReviewed
-    isReviewed = false
+    isReviewed = isNoted = false
     if (wasReviewed || commit.lines < MIN_LINES) return r
     isNoted = true
     $.ui.toast(`commit ${commit.sha} changed ${commit.lines} lines with no review; Claude was asked to review it`)
