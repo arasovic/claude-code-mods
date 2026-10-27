@@ -22,9 +22,11 @@ So the timer helps most on 5 minutes, where a coffee break is enough to lose the
 
 A line just above the prompt, counting from the last request of the main conversation. It sits apart from the status lines under the prompt, so its tick every second does not shuffle them:
 
-- 🟢 `cache 54:12`: the cache is warm.
-- 🟡 `cache 0:48 · send soon`: a fifth of its life or less is left.
-- 🔴 `cache cold · next message re-writes 182k tokens`: it has expired; the number is how much the next message caches again.
+- `● cache 54:12`, green dot: the cache is warm.
+- `● cache 0:48 · send soon`, yellow dot: a fifth of its life or less is left.
+- `● cache cold · next message re-writes 182k tokens`, red dot: it has expired; the number is how much the next message caches again.
+
+The dot takes its color from your theme.
 
 Subagent requests do not count; they do not keep the main conversation's cache alive. The line clears after `/clear` and after the main conversation is compacted, since the next message writes a new cache either way. This covers `/compact`, the automatic compaction when the context fills, and the one Claude Code runs while the session is idle. A subagent's compaction, a skipped one, or a summary prepared ahead of time leaves it running.
 

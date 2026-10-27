@@ -24,25 +24,27 @@ export function limitState(limits: readonly SessionRateLimit[]) {
 
 const tokens = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`)
 
-export function statusText(now: number, requestAt: number | undefined, ttl: Ttl, context: number): string | undefined {
+type Status = { tone: 'success' | 'warning' | 'error'; value: string; hint?: string }
+
+export function cacheStatus(now: number, requestAt: number | undefined, ttl: Ttl, context: number): Status | undefined {
   if (requestAt === undefined) return undefined
   const left = requestAt + TTL_MS[ttl] - now
-  if (left <= 0) return `🔴 cache cold · next message re-writes ${tokens(context)} tokens`
+  if (left <= 0) return { tone: 'error', value: 'cold', hint: `next message re-writes ${tokens(context)} tokens` }
   const secs = Math.ceil(left / 1000)
-  const clock = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
-  return left <= TTL_MS[ttl] / 5 ? `🟡 cache ${clock} · send soon` : `🟢 cache ${clock}`
+  const value = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+  return left <= TTL_MS[ttl] / 5 ? { tone: 'warning', value, hint: 'send soon' } : { tone: 'success', value }
 }
 
 const inputs: TtlInputs = { force5m: false, enable1h: false, subscribed: false, overLimit: false }
 let requestAt: number | undefined
 let context = 0
-let shown: string | undefined
+let shown: Status | undefined
 const LIMITS = 'limits'
 
 async function tick($: EngineInterface) {
-  const text = statusText(await $.clock.now(), requestAt, cacheTtl(inputs), context)
-  if (text !== shown) {
-    shown = text
+  const status = cacheStatus(await $.clock.now(), requestAt, cacheTtl(inputs), context)
+  if (JSON.stringify(status) !== JSON.stringify(shown)) {
+    shown = status
     $.ui.invalidate('ui.render')
   }
 }
@@ -93,10 +95,17 @@ export const register: Register = (on, options) => {
     const below = await next(e)
     if (e.props.hasSurvey || shown === undefined) return below
     const { Box, Text } = $.ui.resolve(e)
+    // A theme-colored dot, not an emoji: the desktop draws emoji as large glossy balls beside other plugins' flat text.
     return (
       <Box flexDirection="column">
         {below}
-        <Text>{shown}</Text>
+        <Text wrap="truncate-end">
+          <Text color={shown.tone}>●</Text> <Text dimColor>cache</Text>{' '}
+          <Text weight="semibold" tabular>
+            {shown.value}
+          </Text>
+          {shown.hint !== undefined && <Text dimColor>{` · ${shown.hint}`}</Text>}
+        </Text>
       </Box>
     )
   })
