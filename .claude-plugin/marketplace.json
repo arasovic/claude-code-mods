@@ -80,6 +80,11 @@
       "name": "recall-cue",
       "source": "./recall-cue",
       "description": "Points the model, out of the user's sight, at saved notes whose words match the prompt: auto-memory files and any folders you add"
+    },
+    {
+      "name": "review-ping",
+      "source": "./review-ping",
+      "description": "Asks the model, out of the user's sight, to review a commit of 30 or more lines when no review ran since the commit before it"
     }
   ]
 }

@@ -114,7 +114,7 @@ Small lines in the places you already look: above the prompt, under it, and unde
 
 ## Guards that work out of sight
 
-These draw little or nothing. They step in when something goes wrong, or when a saved note fits.
+These draw little or nothing. They step in when something goes wrong, when a saved note fits, or when a big commit had no review.
 
 <table>
   <tr>
@@ -144,10 +144,16 @@ use a purpose prefix such as fix/ or chore/.</pre>
     </td>
   </tr>
   <tr>
-    <td colspan="2" valign="top">
+    <td width="50%" valign="top">
       <h3><a href="recall-cue/README.md">recall‑cue</a></h3>
       <p><b>Saved notes come back when they matter.</b> When your prompt shares words with an auto-memory note, or a note in a folder you add, the model is pointed at it.</p>
       <pre>- memory/release-flow.md: Bump the version, then tag</pre>
+    </td>
+    <td width="50%" valign="top">
+      <h3><a href="review-ping/README.md">review‑ping</a></h3>
+      <p><b>Big commits get a review.</b> When Claude commits 30 or more lines and no review ran since the last commit, it is asked to review the commit. A toast tells you.</p>
+      <pre>review-ping: commit 1a2b3c4 changed 35 lines
+with no review; Claude was asked to review it</pre>
     </td>
   </tr>
 </table>
