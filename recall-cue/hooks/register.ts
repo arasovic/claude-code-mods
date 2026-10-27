@@ -21,6 +21,8 @@ function fold(text: string) {
 const STOP = new Set(
   ('an as at be by do go if in is it me my no of on or so to up us we the and for with this that from into what when where which your you are was were have has '
     + 'had not but can will would should could about then them they there here also only just more most some such than very does did how why who its our all any one '
+    + 'many much both each every other another same own few less after before again still while over under out off been being these those their his him she may might '
+    + 'must yet too nor because though until '
     + 'md ve bu şu o da de ki mi mı mu mü ne ya bir için ile gibi daha sonra ama veya nasıl neden niye çok var yok olan olsun olarak kadar ben sen biz siz onu bunu '
     + 'şunu her hiç zaman şey yeni eski tüm son ilk hangi nerede şimdi artık yine bile').split(' ').map(fold),
 )
