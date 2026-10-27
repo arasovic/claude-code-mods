@@ -1,6 +1,6 @@
 {
   "name": "pin-board",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Pins standing notes with /pin that Claude keeps following after /compact and /clear; shows them in one row above the prompt or as a counter, and keeps them per folder with --keep",
   "author": {
     "name": "Mehmet Aras",
