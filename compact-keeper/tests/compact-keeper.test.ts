@@ -47,7 +47,8 @@ test('only a main-thread compaction that ran writes a handoff', async ($, on) =>
 const RUN = { origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
 
 // The engine beneath, with the conversation's first row, which a compaction replaces.
-function engine(...[$, on]: Parameters<TestBody>) {
+// oneString: core's notes and the message's text in one string, as a linked session's first prompt comes.
+function engine($: Parameters<TestBody>[0], on: Parameters<TestBody>[1], oneString = false) {
   mock.env(on, { HOME: '/home/a' })
   const clock = mock.clock(on)
   const writes: string[] = []
@@ -57,7 +58,7 @@ function engine(...[$, on]: Parameters<TestBody>) {
   on('ui.toast', () => ({ value: undefined }))
   let first = 'hello'
   // A compaction replaces the request's first message, and core's notes ahead of it; the rows form keeps the old one.
-  const api = () => [{ role: 'user' as const, content: [{ type: 'text', text: `<system-reminder>\nbefore ${first}\n</system-reminder>` }, { type: 'text', text: first }] }]
+  const api = (note = `<system-reminder>\nbefore ${first}\n</system-reminder>`) => [{ role: 'user' as const, content: oneString ? [{ type: 'text', text: `${note}\n\n${first}` }] : [{ type: 'text', text: note }, { type: 'text', text: first }] }]
   on('session.messages', (_$, e) => (e.as === 'api' ? { value: api() } : { value: [msg('hello')] }))
   on('command.run', () => ({ text: '' }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
@@ -137,6 +138,15 @@ test('an automatic compaction in the first reply after a start is saved at its e
   await s.turn()
   expect(s.writes).toHaveLength(1)
   expect(s.writes[0]).toContain('(auto or plugin)')
+})
+
+test('a first prompt that shares one string with core notes is still read', async ($, on) => {
+  const s = engine($, on, true)
+  await $.turn.start({ text: 'hi', turnId: 't' })
+  s.compact('summary')
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]?.endsWith('## Summary\n\nsummary\n')).toBe(true)
 })
 
 test('a compaction session.compact saved is not saved again by the late check', async ($, on) => {
