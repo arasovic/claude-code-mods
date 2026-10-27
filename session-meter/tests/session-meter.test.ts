@@ -1,7 +1,7 @@
 import { expect, mock, test, type Engine } from 'claude-code/testing'
 import type { On, RenderSurface } from 'claude-code'
 
-import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, pace, readOptions, target, tokens, toolName } from '../hooks/register'
+import { braille, cells, checkReset, cross, duration, elapsed, fit, heaviest, levels, meter, note, nudge, pace, readOptions, target, tokens, toolName } from '../hooks/register'
 import type { MeterResume } from '../types'
 
 const at = (context: number | null, fiveHour?: number, sevenDay?: number) => ({
@@ -60,10 +60,10 @@ test('checkReset takes an optional next for a compact and needs a full handoff f
 })
 
 test('readOptions falls back to suggest and 60 for values outside the manifest', () => {
-  expect(readOptions({ contextAction: 'compact-or-clear', contextAt: 75 })).toEqual({ action: 'compact-or-clear', contextAt: 75 })
-  expect(readOptions({ contextAction: 'compat', contextAt: 'x' })).toEqual({ action: 'suggest', contextAt: 60 })
-  expect(readOptions({ contextAt: 5 })).toEqual({ action: 'suggest', contextAt: 60 })
-  expect(readOptions({})).toEqual({ action: 'suggest', contextAt: 60 })
+  expect(readOptions({ contextAction: 'compact-or-clear', contextAt: 75, commitNudge: true })).toEqual({ action: 'compact-or-clear', contextAt: 75, commitNudge: true })
+  expect(readOptions({ contextAction: 'compat', contextAt: 'x', commitNudge: 'yes' })).toEqual({ action: 'suggest', contextAt: 60, commitNudge: false })
+  expect(readOptions({ contextAt: 5 })).toEqual({ action: 'suggest', contextAt: 60, commitNudge: false })
+  expect(readOptions({})).toEqual({ action: 'suggest', contextAt: 60, commitNudge: false })
 })
 
 test('cells, braille chart, meter and token format', () => {
@@ -379,6 +379,47 @@ test('a headless session gets no context_reset tool and the suggest note', { opt
   expect(text).toContain('context window is 80% full')
   expect(text).toContain('suggest /compact')
   expect(text).not.toContain('context_reset')
+})
+
+// A reset session whose Bash prints `out.stdout`; `run` returns the context the call's result carries.
+const commitSession = ($: Engine, on: On) => {
+  const { fill } = resetSession($, on)
+  const out = { stdout: '[main 1a2b3c4] Add the parser\n 2 files changed, 31 insertions(+), 4 deletions(-)\n' }
+  on('tool.call', () => ({ result: { stdout: out.stdout, stderr: '', interrupted: false } }) as never)
+  // agentId is not in every build's Bash input type, but it reaches the hook.
+  const run = async (command = 'git commit -m "Add the parser"', agentId?: string) => (await $.tool.call({ tool: 'Bash', command, agentId } as never)).context
+  return { fill, out, run }
+}
+
+test('with commitNudge, every commit while the context is full reminds the model to compact', { options: { contextAction: 'compact', commitNudge: true, autoOpen: false } }, async ($, on) => {
+  const { fill, out, run } = commitSession($, on)
+
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  expect(await run()).toEqual([nudge(80)])
+  expect(await run()).toEqual([nudge(80)])
+
+  // Not a commit, a subagent's commit, or a commit that did not happen.
+  expect(await run('git log -1')).toBeUndefined()
+  expect(await run('git commit -m "x"', 'a1')).toBeUndefined()
+  out.stdout = 'nothing to commit, working tree clean\n'
+  expect(await run()).toBeUndefined()
+
+  // Below the threshold the tool would refuse, so there is nothing to remind.
+  out.stdout = '[main 5d6e7f8] Fix a typo\n 1 file changed, 1 insertion(+), 1 deletion(-)\n'
+  fill.percent = 30
+  expect(await run()).toBeUndefined()
+})
+
+test('commitNudge sends nothing when it is off', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
+  const { run } = commitSession($, on)
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: true })
+  expect(await run()).toBeUndefined()
+})
+
+test('commitNudge sends nothing in a plain headless run, which has no context_reset tool', { options: { contextAction: 'compact', commitNudge: true, autoOpen: false } }, async ($, on) => {
+  const { run } = commitSession($, on)
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  expect(await run()).toBeUndefined()
 })
 
 test('a headless session the desktop attaches to gets the tool and compacts through a queued /compact', { options: { contextAction: 'compact', autoOpen: false } }, async ($, on) => {
