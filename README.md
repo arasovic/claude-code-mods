@@ -114,7 +114,7 @@ Small lines in the places you already look: above the prompt, under it, and unde
 
 ## Guards that work out of sight
 
-These draw little or nothing. They step in when something goes wrong.
+These draw little or nothing. They step in when something goes wrong, or when a saved note fits.
 
 <table>
   <tr>
@@ -141,6 +141,13 @@ use a purpose prefix such as fix/ or chore/.</pre>
       <p><b>Nothing is lost to <code>/compact</code>.</b> Each compaction's summary, session id, resume command and edited files are saved as one Markdown file.</p>
       <pre>~/.claude/handoffs/
   2026-10-03-0952-my-app-4f9c2a1e.md</pre>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" valign="top">
+      <h3><a href="recall-cue/README.md">recall‑cue</a></h3>
+      <p><b>Saved notes come back when they matter.</b> When your prompt shares words with an auto-memory note, or a note in a folder you add, the model is pointed at it.</p>
+      <pre>- memory/release-flow.md: Bump the version, then tag</pre>
     </td>
   </tr>
 </table>
