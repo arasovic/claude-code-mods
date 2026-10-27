@@ -135,6 +135,13 @@ export const register: Register = (on, options) => {
     return result
   })
 
+  // The first reply after a start, resume or /clear can compact before any check has read the conversation.
+  // ponytail: core does not wait for turn.start, so a read held up past the compaction's summary call misses that file.
+  on('turn.start', async ($, e, next) => {
+    if (e.agentId === undefined) seenFirst ??= await firstText($).catch(() => undefined)
+    return next(e)
+  })
+
   on('turn.complete', async ($, e, next) => {
     if (e.agentId === undefined) await check($).catch(() => {})
     return next(e)

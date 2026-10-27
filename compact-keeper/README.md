@@ -22,7 +22,7 @@ On other setups, leave it off. With it on, every file then has the limits listed
 
 ## Limits
 
-- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans and on a machine with managed settings. The mod then notices a compaction only after it: `/compact` is saved about a second after it finishes, an automatic compaction at the end of the reply it ran in, and one while the session is idle at the end of the next reply. That file has no token counts, and its trigger reads `auto or plugin` for anything but `/compact`. An automatic compaction in the first reply after Claude Code starts or resumes gets no file, and two compactions in one reply get one file, with the later summary. In the desktop app, `/clear` stops Claude Code before the mod can read the conversation, so an automatic compaction not saved yet gets no file.
+- Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans and on a machine with managed settings. The mod then notices a compaction only after it: `/compact` is saved about a second after it finishes, an automatic compaction at the end of the reply it ran in, and one while the session is idle at the end of the next reply. That file has no token counts, and its trigger reads `auto or plugin` for anything but `/compact`. Two compactions in one reply get one file, with the later summary. In the desktop app, `/clear` stops Claude Code before the mod can read the conversation, so an automatic compaction not saved yet gets no file.
 
 ## Install
 

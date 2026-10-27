@@ -63,6 +63,7 @@ function engine(...[$, on]: Parameters<TestBody>) {
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   const turn = (agentId?: string) => $.turn.complete({ answer: '', durationMs: 0, isAborted: false, reason: 'answer', turnId: 't', ...(agentId ? { agentId } : {}) })
   return { writes, turn, clock, compact: (summary: string) => void (first = summary) }
 }
@@ -127,6 +128,15 @@ test('a /compact is saved once its conversation shows, before any turn, even the
   await s.clock.advance(2000)
   await s.turn()
   expect(s.writes).toHaveLength(1)
+})
+
+test('an automatic compaction in the first reply after a start is saved at its end', async ($, on) => {
+  const s = engine($, on)
+  await $.turn.start({ text: 'hi', turnId: 't' })
+  s.compact('summary')
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]).toContain('(auto or plugin)')
 })
 
 test('a compaction session.compact saved is not saved again by the late check', async ($, on) => {
