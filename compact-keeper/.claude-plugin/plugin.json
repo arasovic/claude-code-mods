@@ -5,5 +5,14 @@
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "skipCompactHook": {
+      "type": "boolean",
+      "title": "Skip the compaction hook",
+      "description": "Stops the \"session.compact hook was skipped\" notice by not hooking the compaction itself, the step Claude Code's Security default sends past compact-keeper. Each compaction is then saved after it, as it already is where Security default runs first: no token counts, \"auto or plugin\" for anything but /compact, and an automatic one only at the end of its reply. An automatic compaction in the first reply after a start or resume gets no file, and two in one reply get one file. On other setups, leave it off.",
+      "required": false,
+      "default": false
+    }
+  }
 }

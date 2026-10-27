@@ -99,7 +99,7 @@ async function poll($: EngineInterface) {
   if (first !== undefined && first !== seenFirst) await check($)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   // A timer started in any other hook stops when that hook's dispatch ends.
   on('session.start', async ($, e, next) => ($.clock.every(POLL_MS, () => void poll($).catch(() => {})), next(e)))
 
@@ -112,14 +112,18 @@ export const register: Register = on => {
     return result
   })
 
-  on('session.compact', async ($, e, next) => {
-    const result = await next(e)
-    // A precompute may never be installed, and a subagent's compaction is not the conversation's.
-    if (result.skip !== undefined || e.trigger === 'precompute' || e.agentId !== undefined) return result
-    handled = true
-    await save($, { trigger: e.trigger, instructions: e.instructions, tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter, summary: summaryOf(e.messages, result.messages) })
-    return result
-  })
+  // Claude Code tells once a session that a seated cc-plugin-sec-default skipped this hook. skipCompactHook leaves it out,
+  // so the notice stops and the late check below saves every compaction.
+  if (options.skipCompactHook !== true) {
+    on('session.compact', async ($, e, next) => {
+      const result = await next(e)
+      // A precompute may never be installed, and a subagent's compaction is not the conversation's.
+      if (result.skip !== undefined || e.trigger === 'precompute' || e.agentId !== undefined) return result
+      handled = true
+      await save($, { trigger: e.trigger, instructions: e.instructions, tokensBefore: result.tokensBefore, tokensAfter: result.tokensAfter, summary: summaryOf(e.messages, result.messages) })
+      return result
+    })
+  }
 
   // /compact, typed or run by a plugin, leaves its label for the poll; any other compaction waits for the next main turn or session end.
   on('command.run', { command: 'compact' }, async ($, e, next) => {

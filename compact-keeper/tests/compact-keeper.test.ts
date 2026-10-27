@@ -138,3 +138,15 @@ test('a compaction session.compact saved is not saved again by the late check', 
   await s.turn()
   expect(s.writes).toHaveLength(1)
 })
+
+test('skipCompactHook leaves every compaction to the late check', { options: { skipCompactHook: true } }, async ($, on) => {
+  const s = engine($, on)
+  on('session.compact', () => ({ messages: [msg('summary')] }))
+  await s.turn()
+  s.compact('summary')
+  await $.session.compact({ trigger: 'auto', messages: [msg('old', 'h1')] })
+  expect(s.writes).toEqual([])
+  await s.turn()
+  expect(s.writes).toHaveLength(1)
+  expect(s.writes[0]).toContain('(auto or plugin)')
+})
