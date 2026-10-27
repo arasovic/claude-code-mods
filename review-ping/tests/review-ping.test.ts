@@ -44,13 +44,21 @@ test('a review skill, a reviewer agent or a typed /code-review covers the next c
 })
 
 test('a review after a note answers that note and does not cover the next commit', async ($, on) => {
-  const { run, skill } = setup($, on)
+  const { state, run, skill } = setup($, on)
   expect(await run()).toEqual([note('1a2b3c4', 35)])
   await skill('code-review')
   expect(await run()).toEqual([note('1a2b3c4', 35)])
 
   // Once the note is answered, the next review covers the next commit again.
   await skill('code-review')
+  await skill('code-review')
+  expect(await run()).toBeUndefined()
+
+  // A note nobody answered waits only until the next commit.
+  expect(await run()).toEqual([note('1a2b3c4', 35)])
+  state.stdout = SMALL
+  await run()
+  state.stdout = BIG
   await skill('code-review')
   expect(await run()).toBeUndefined()
 })

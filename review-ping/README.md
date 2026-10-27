@@ -13,7 +13,7 @@ review-ping: commit 1a2b3c4 changed 35 lines with no review; Claude was asked to
 - The line count comes from git's own summary under `git commit`: insertions plus deletions.
 - A review is a skill or an agent type whose name holds "review", run by Claude, or a slash command such as `/code-review` that you type.
 - A review covers the next commit. Each commit clears it, so the commit after that needs a review of its own.
-- After a note, the next review is the review of the noted commit. It does not cover the commit after it.
+- A review between a note and the next commit is the review of the noted commit. It does not cover the commit after it.
 - `/clear` forgets a review.
 
 ## Limits
