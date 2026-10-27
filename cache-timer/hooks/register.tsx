@@ -63,7 +63,7 @@ async function forget($: EngineInterface) {
   await tick($)
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
   on('turn.step', async function* ($, e, next) {
     // A subagent's requests carry their own prefix; only the main thread's keep its cache alive.
     if (e.agentId !== undefined) return yield* next(e)
@@ -105,12 +105,16 @@ export const register: Register = on => {
 
   // After /clear, /resume or a compaction the next request writes a new prefix whatever the clock says.
   on('session.end', async ($, e, next) => (await forget($), next(e)))
-  // A subagent's compaction leaves the main thread's prefix alone; a skipped one or a precompute changes nothing.
-  on('session.compact', async ($, e, next) => {
-    const result = await next(e)
-    if (e.agentId === undefined && e.trigger !== 'precompute' && result.skip === undefined) await forget($)
-    return result
-  })
+  // Claude Code tells once a session that a seated cc-plugin-sec-default skipped this hook. skipCompactHook leaves it out,
+  // so the notice stops and only /compact, below, clears the band at once.
+  if (options.skipCompactHook !== true) {
+    // A subagent's compaction leaves the main thread's prefix alone; a skipped one or a precompute changes nothing.
+    on('session.compact', async ($, e, next) => {
+      const result = await next(e)
+      if (e.agentId === undefined && e.trigger !== 'precompute' && result.skip === undefined) await forget($)
+      return result
+    })
+  }
   // A seated cc-plugin-sec-default sends session.compact past user-tier mods; /compact, typed or a plugin's, still
   // shows here. An automatic compaction needs neither: the request after it restarts the clock.
   on('command.run', { command: 'compact' }, async ($, e, next) => {

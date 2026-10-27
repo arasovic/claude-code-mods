@@ -28,6 +28,12 @@ A line just above the prompt, counting from the last request of the main convers
 
 Subagent requests do not count; they do not keep the main conversation's cache alive. The line clears after `/clear` and after the main conversation is compacted, since the next message writes a new cache either way. This covers `/compact`, the automatic compaction when the context fills, and the one Claude Code runs while the session is idle. A subagent's compaction, a skipped one, or a summary prepared ahead of time leaves it running.
 
+## Stop the skipped-hook notice
+
+When Security default runs first (see Limits), Claude Code says once a session that cache-timer's `session.compact` hook was skipped. To stop that notice, turn on **Skip the compaction hook** in `/config` (the `skipCompactHook` option). The mod then stops hooking the compaction itself: only `/compact` clears the line at once, as described under Limits.
+
+On other setups, leave it off. With it on, a compaction while the session is idle, or one a plugin starts, can leave the old count until your next message. After an automatic compaction in a reply, the next request restarts the count anyway.
+
 ## Limits
 
 - Claude Code does not tell mods which lifetime it picked. The mod follows the engine's own order: `FORCE_PROMPT_CACHING_5M`, then `CLAUDE_CODE_PROMPT_CACHE_TTL`, then the `promptCacheTtl` setting, then `ENABLE_PROMPT_CACHING_1H`, then 1 hour on a subscription within its limits and 5 minutes otherwise. It remembers your limits from the last reading, so a new session starts with the right lifetime; on the very first run it assumes 5 minutes until the first reply reports them. After you switch between a subscription and an API key, the first reply can show the old lifetime for a moment.

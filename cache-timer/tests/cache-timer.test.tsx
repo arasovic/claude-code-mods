@@ -119,3 +119,21 @@ test('/compact clears the band even when session.compact never reaches the mod',
   await clock.advance(1000)
   expect(await band()).toBeUndefined()
 })
+
+test('skipCompactHook leaves the band to /compact', { options: { skipCompactHook: true } }, async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+  mock.store(on)
+  const messages = [{ role: 'user' as const, text: 'summary', toolUses: [] }]
+  on('session.compact', () => ({ messages }))
+  on('command.run', () => ({ text: '' }))
+  const band = await reply($, on)
+
+  await $.session.compact({ trigger: 'auto', messages })
+  await clock.advance(1000)
+  expect(await band()).toBe('🟢 cache 4:59')
+
+  await $.command.run({ origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 }, command: 'compact', args: '' })
+  await clock.advance(1000)
+  expect(await band()).toBeUndefined()
+})
