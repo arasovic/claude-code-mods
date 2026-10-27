@@ -1,6 +1,6 @@
 {
   "name": "review-ping",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Asks the model, out of the user's sight, to review a commit of 30 or more lines when no review ran since the commit before it",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
