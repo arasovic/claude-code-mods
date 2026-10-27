@@ -142,3 +142,12 @@ test('once prompt.compose runs, the system prompt carries the list and prompts c
   p.compact('summary')
   expect(await p.submit()).toEqual([])
 })
+
+test('skipSystemPrompt keeps the list out of the system prompt and sends it with prompts', { options: { skipSystemPrompt: true } }, async ($, on) => {
+  const p = prompts($, on)
+  const s = await start($, on)
+  await s.run('pin', 'use pnpm')
+  expect(await s.compose()).toBeUndefined()
+  expect((await p.submit())[0]).toContain('1. use pnpm')
+  expect(await p.submit()).toEqual([])
+})

@@ -103,12 +103,16 @@ export const register: Register = (on, options) => {
     return next({ ...e, context: [...(e.context ?? []), section(pins)] })
   })
 
-  on('prompt.compose', async ($, e, next) => {
-    composed = true
-    const result = await next(e)
-    if (!pins.length) return result
-    return { sections: [...result.sections, { id: 'pin-board:pins', text: section(pins), scope: 'session' }] }
-  })
+  // Claude Code tells once a session that a seated cc-plugin-sec-default skipped this hook. skipSystemPrompt leaves it out,
+  // so the notice stops and the list always rides a prompt.
+  if (options.skipSystemPrompt !== true) {
+    on('prompt.compose', async ($, e, next) => {
+      composed = true
+      const result = await next(e)
+      if (!pins.length) return result
+      return { sections: [...result.sections, { id: 'pin-board:pins', text: section(pins), scope: 'session' }] }
+    })
+  }
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     // The band is shared with other plugins: keep what they drew beneath, and take one row however many pins there are.

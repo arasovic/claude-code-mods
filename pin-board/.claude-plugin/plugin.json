@@ -19,6 +19,13 @@
         "band",
         "counter"
       ]
+    },
+    "skipSystemPrompt": {
+      "type": "boolean",
+      "title": "Skip the system prompt",
+      "description": "Stops the \"prompt.compose hook was skipped\" notice by not adding the pins to the system prompt, the step Claude Code's Security default sends past pin-board. The pins then always go with your first message and the first after a compaction or /clear, as they already do where Security default runs first. On other setups, leave it off to keep them in the system prompt.",
+      "required": false,
+      "default": false
     }
   }
 }
