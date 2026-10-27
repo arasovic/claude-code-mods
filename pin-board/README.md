@@ -27,10 +27,14 @@ If that band is already busy, set **Where pins show** to `counter` in `/config`.
 - The whole list is also part of the system prompt. Claude Code builds the system prompt again at the start of a session, after `/compact` and after `/clear`, so the pins are there each time without being sent with every message.
 - Claude Code's built-in "Security default" plugin runs before the mod on Team and Enterprise plans and on a machine with managed settings. It keeps the list out of the system prompt. The mod then sends the list with your first message, and again with the first message after a compaction or `/clear`.
 
+## Stop the skipped-hook notice
+
+When Security default runs first, Claude Code says once a session that pin-board's `prompt.compose` hook was skipped. To stop that notice, turn on **Skip the system prompt** in `/config` (the `skipSystemPrompt` option). The mod then stops adding the list to the system prompt and always sends it with your messages, as above. On other setups this only moves the list out of the system prompt: Claude still gets it.
+
 ## Limits
 
 - Between two rebuilds of the system prompt, it can still list a pin you removed. The unpin note tells Claude that the later change wins.
-- Changing **Where pins show** reloads the mod, which drops pins that are not kept.
+- Changing **Where pins show** or **Skip the system prompt** reloads the mod, which drops pins that are not kept.
 - Pins are plain instructions to the model, not rules the engine enforces. For a hard rule, use a hook such as guardrails.
 
 ## Install
