@@ -4,5 +4,14 @@
   "description": "Counts down to when the prompt cache expires, so you can send the next message before the whole conversation has to be cached again",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
-  "license": "MIT"
+  "license": "MIT",
+  "userConfig": {
+    "skipCompactHook": {
+      "type": "boolean",
+      "title": "Skip the compaction hook",
+      "description": "Stops the \"session.compact hook was skipped\" notice by not hooking the compaction itself, the step Claude Code's Security default sends past cache-timer. Only /compact then clears the line at once, as it already does where Security default runs first; after an automatic compaction in a reply, the next request restarts the count anyway. A compaction while the session is idle, or one a plugin starts, can leave the old count until your next message. On other setups, leave it off.",
+      "required": false,
+      "default": false
+    }
+  }
 }
