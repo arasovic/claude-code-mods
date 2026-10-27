@@ -25,7 +25,7 @@ The note goes in as prompt context, not as a system prompt change, so the prompt
 
 ## Letting the model reset the context
 
-By default the model only suggests a reset and you decide. Two options in `/config` change that:
+By default the model only suggests a reset and you decide. These options in `/config` change that:
 
 | Option | Values | What it does |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ By default the model only suggests a reset and you decide. Two options in `/conf
 | | `compact` | The model gets a `context_reset` tool. At a natural break it calls the tool. When the turn ends, the mod compacts the conversation and sends the model its next step, so the work goes on. A message you send while it compacts carries that step instead, and the mod drops its own step message, so the step never arrives after the work it names. The mod hands the step on only once its compact call (`/compact` in the desktop app) has returned. A message that runs before that, such as a note from another session queued ahead of it, gets no step, and the step message still follows. When the next step is yours, such as a decision, the model sets `wait` and the mod compacts, then waits for you. With `wait`, the model's `next` holds what it wants to remember: the mod sends no message of its own and adds it, hidden, to the next message you send. The model writes its whole reply, question included, before it calls the tool, so you answer from what it wrote. When the compaction waits for you, the tool refuses the call until the turn has shown you some text: a model can write its reply only in its thinking, which is hidden or summarized. The refused compaction is kept: the model ends its turn with its reply as text, and the compaction runs after it. If the turn's last message has no text, or you stop it, nothing runs. |
 | | `compact-or-clear` | As `compact`. The model can also choose a clear when the next work does not build on the conversation. A clear needs a handoff of at least 200 characters. The mod saves the handoff to `~/.claude/handoffs/`, runs `/clear`, then sends the handoff as the first message of the new session. A message you send while it clears carries the handoff instead, and the mod drops its own handoff message. |
 | `contextAt` | 10 to 95, default 60 | The context percentage that sends the note. |
+| `commitNudge` | off (default) or on | With `compact` or `compact-or-clear`: each time Claude commits while the context is at or above `contextAt`, the mod reminds the model that the commit is a good moment to call `context_reset`. The note tells it to finish any review the commit still needs first, so it reads the same whether or not a review mod such as review-ping is installed. Commits made by a subagent, `git commit -q` and a plain headless run get no reminder. |
 
 The tool refuses a call below `contextAt` and a call from a subagent. A plain headless run (`claude -p`) gets no tool and only the suggestion, since it ends with the turn. The desktop app also runs Claude Code headless, but it stays open: there the mod compacts by queueing a bare `/compact` once the turn ends, so a hook that vetoes the compaction shows no "skipped" toast. The step goes only in the message that follows, so you see it, and the model reads it, once. When you interrupt the turn, no reset runs. The old conversation stays available with `/resume`.
 

@@ -30,6 +30,13 @@
       "default": 60,
       "min": 10,
       "max": 95
+    },
+    "commitNudge": {
+      "type": "boolean",
+      "title": "Remind after a commit",
+      "description": "With compact or compact-or-clear: after each commit Claude makes while the context is at or above the threshold, remind the model that the commit is a good moment to compact, after any review the commit still needs.",
+      "required": false,
+      "default": false
     }
   }
 }

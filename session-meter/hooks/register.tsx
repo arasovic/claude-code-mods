@@ -30,8 +30,18 @@ export type ContextAction = (typeof ACTIONS)[number]
 export const readOptions = (options: Readonly<Record<string, unknown>>) => {
   const action = ACTIONS.find(a => a === options.contextAction) ?? 'suggest'
   const at = Number(options.contextAt)
-  return { action, contextAt: Number.isFinite(at) && at >= 10 && at <= 95 ? at : 60 }
+  return { action, contextAt: Number.isFinite(at) && at >= 10 && at <= 95 ? at : 60, commitNudge: options.commitNudge === true }
 }
+
+// The same commit check as review-ping, copied: a mod must work without the others, and mods cannot import each other.
+const COMMIT = /\bgit\b[^;&|\n]*\bcommit\b/
+// git commit prints "[main abc1234] message"; a root commit or a detached HEAD puts more words before the hash.
+const COMMITTED = /^\[[^\]\n]* [0-9a-f]{7,40}\] /m
+
+// Reads right alone and beside another mod's note on the same commit, such as a request to review it. It leaves the
+// user's own steps first: told to stop before them, models in live runs did the steps and then forgot the reset.
+export const nudge = (pct: number) =>
+  `session-meter: an automatic note the user does not see. The commit is done and the context window is ${Math.round(pct)}% full. Before you end this turn, call the ${RESET} tool without asking the user. First finish any review this commit still needs and the steps the user asked for in this turn.`
 
 const WINDOWS = [
   { kind: 'five_hour', label: '5h' },
@@ -312,7 +322,7 @@ const agentLabel = async ($: EngineInterface, id: string | undefined) => {
 }
 
 export const register: Register = (on, options) => {
-  const { action, contextAt } = readOptions(options)
+  const { action, contextAt, commitNudge } = readOptions(options)
   const thresholds = levels(contextAt)
   // A plain -p run ends with the turn, so the tool would only stop the work. The desktop app is headless too,
   // but it stays open and attaches as a surface, which a -p run never does.
@@ -420,6 +430,21 @@ export const register: Register = (on, options) => {
     await update($, pending, () => reset)
     return { result: `The ${reset.mode} runs when this turn ends. If your visible reply left out anything you meant to tell the user, write it now. Then end your turn with one short line.` }
   })
+
+  // Only where the tool exists, and only from the main thread, which owns the reset.
+  // shortcut: reads git's own summary, so `git commit -q` gets no reminder; check HEAD before and after if that matters.
+  if (commitNudge)
+    on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+      const r = await next(e)
+      if (live === 'suggest' || r.deny !== undefined || r.isError || e.agentId !== undefined) return r
+      if (!COMMIT.test(e.command) || !COMMITTED.test(r.result.stdout)) return r
+      await refresh($)
+      const pct = (await read($, reading)).context ?? 0
+      if (pct < contextAt) return r
+      const now = await $.clock.now()
+      await update($, notes, list => [...list, { at: now, text: `commit at ${Math.round(pct)}%: asked to compact` }].slice(-5))
+      return { ...r, context: [...(r.context ?? []), nudge(pct)] }
+    })
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
