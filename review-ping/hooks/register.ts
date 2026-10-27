@@ -22,22 +22,28 @@ export function committed(output: string) {
 export const register: Register = on => {
   // A review covers the next commit, even with edits in between; every commit clears it.
   let isReviewed = false
+  // A review run while a note waits answers that note: it looks back at the noted commit, so it covers nothing ahead.
+  let isNoted = false
+  const review = () => {
+    if (isNoted) isNoted = false
+    else isReviewed = true
+  }
   const ran = (r: { deny?: string; isError?: boolean }) => r.deny === undefined && !r.isError
 
   on('tool.call', { tool: 'Skill' }, async ($, e, next) => {
     const r = await next(e)
-    if (ran(r) && !e.agentId && REVIEW.test(e.skill)) isReviewed = true
+    if (ran(r) && !e.agentId && REVIEW.test(e.skill)) review()
     return r
   })
 
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const r = await next(e)
-    if (ran(r) && !e.agentId && REVIEW.test(e.subagent_type ?? '')) isReviewed = true
+    if (ran(r) && !e.agentId && REVIEW.test(e.subagent_type ?? '')) review()
     return r
   })
 
   on('prompt.submit', async ($, e, next) => {
-    if (REVIEW.test(e.command?.name ?? '')) isReviewed = true
+    if (REVIEW.test(e.command?.name ?? '')) review()
     return next(e)
   })
 
@@ -51,9 +57,10 @@ export const register: Register = on => {
     const wasReviewed = isReviewed
     isReviewed = false
     if (wasReviewed || commit.lines < MIN_LINES) return r
+    isNoted = true
     $.ui.toast(`commit ${commit.sha} changed ${commit.lines} lines with no review; Claude was asked to review it`)
     return { ...r, context: [...(r.context ?? []), note(commit.sha, commit.lines)] }
   })
 
-  on('session.end', async ($, e, next) => ((isReviewed = false), next(e)))
+  on('session.end', async ($, e, next) => ((isReviewed = isNoted = false), next(e)))
 }
