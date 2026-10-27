@@ -27,8 +27,10 @@ const STOP = new Set(
 
 export const words = (text: string) => new Set(fold(text).split(/[^\p{L}\p{N}]+/u).filter(w => w.length >= 2 && !STOP.has(w)))
 
-// Pasted logs and code name many things the request is not about.
-const strip = (text: string) => text.replace(/<pasted_content\b[\s\S]*?<\/pasted_content[^>]*>/g, ' ').replace(/```[\s\S]*?```/g, ' ')
+// Pasted logs and code name many things the request is not about. A quoted line is mostly the model's own earlier answer,
+// and a comment is markup the app adds, such as the desktop's "<!-- reply 1 -->".
+const strip = (text: string) =>
+  text.replace(/<pasted_content\b[\s\S]*?<\/pasted_content[^>]*>/g, ' ').replace(/```[\s\S]*?```/g, ' ').replace(/<!--[\s\S]*?-->/g, ' ').replace(/^[ \t]*>.*$/gm, ' ')
 
 // A shared stem counts too, for suffixes: "dosya" and "dosyası", "compact" and "compaction".
 const near = (a: string, b: string) => a === b || (Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a)))
@@ -65,16 +67,15 @@ export function build(files: NoteFile[]): Note[] {
   })
 }
 
-// Each note with the prompt words it shares, each word weighted by how few notes hold it, best first.
+// Each note with the prompt words it shares, each word weighted by how few notes it matches, best first.
 export function rank(prompt: string, notes: Note[]) {
-  const asked = [...words(strip(prompt))]
-  const held = new Map<string, number>()
-  for (const note of notes) for (const w of note.words) held.set(w, (held.get(w) ?? 0) + 1)
-  // 1 for a word only one note holds, 0 for a word every note holds, so the bar means the same for 15 notes and for 1,500.
-  const weight = (w: string) => Math.log(notes.length / (held.get(w) ?? notes.length)) / Math.log(Math.max(notes.length, 2))
+  // The notes each prompt word matches, by a shared stem too, so "session" stays common when one note holds "sessionmode".
+  const asked = [...words(strip(prompt))].map(a => new Set(notes.filter(note => [...note.words].some(w => near(a, w)))))
+  // 1 for a word only one note matches, 0 for a word every note matches, so the bar means the same for 15 notes and for 1,500.
+  const weight = (held: Set<Note>) => Math.log(notes.length / held.size) / Math.log(Math.max(notes.length, 2))
   return notes
     .map(note => {
-      const hits = asked.map(a => Math.max(0, ...[...note.words].filter(w => near(a, w)).map(weight))).filter(score => score > 0)
+      const hits = asked.filter(held => held.has(note)).map(weight).filter(score => score > 0)
       return { note, count: hits.length, score: hits.reduce((sum, score) => sum + score, 0) }
     })
     .sort((a, b) => b.score - a.score)
