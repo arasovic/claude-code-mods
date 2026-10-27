@@ -1,5 +1,6 @@
 import type { FsEntry, PromptOrigin } from 'claude-code'
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
+import { build, rank } from '../hooks/register'
 
 const MEMORY = '/Users/me/.claude/projects/p/memory'
 const NOTES = '/Users/me/notes'
@@ -55,14 +56,24 @@ test('a prompt that fits a memory note hints it once per session', async ($, on)
   expect((await submit('reading list for the book club', { kind: 'sdk' }))?.[0]).toContain('book-club.md')
 })
 
-test('commands, hidden prompts and other plugins get no hint', async (...args) => {
+test('commands, hidden prompts, other plugins and quoted words get no hint', async (...args) => {
   const { submit } = setUp(...args)
   const text = 'reading list for the book club'
   expect(await submit(text, { kind: 'composer' }, { command: { name: 'review', args: text } })).toBeUndefined()
   expect(await submit(text, { kind: 'composer' }, { isMeta: true })).toBeUndefined()
   expect(await submit(text, { kind: 'plugin', name: 'other' } as never)).toBeUndefined()
+  // Either part alone would match the note.
+  expect(await submit('<!-- book club -->\n> reading list\nis that so?')).toBeUndefined()
   // Without extraFolders only the memory folder is read.
   expect(await submit('when should I water the tomatoes?')).toBeUndefined()
+})
+
+test('a prompt word weighs as much in a note that holds it only as a stem', () => {
+  const note = (name: string, description: string) => ({ path: `/m/${name}.md`, rel: `${name}.md`, text: `---\ndescription: ${description}\n---\n` })
+  const notes = build([note('timer', 'Session timer'), note('export', 'Session export'), note('sharing', 'Session sharing'), note('footer', 'SessionMode badge'), note('theme', 'Theme colors')])
+  const score = (rel: string) => rank('session', notes).find(r => r.note.path === `/m/${rel}.md`)!.score
+  expect(score('footer')).toBe(score('timer'))
+  expect(score('footer')).toBeLessThan(0.2)
 })
 
 test('extraFolders adds a notes folder, and an index line says what a note is about', { options: { extraFolders: ' ~/notes/ , ' } }, async (...args) => {
