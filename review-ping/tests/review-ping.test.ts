@@ -31,7 +31,6 @@ test('a review skill, a reviewer agent or a typed /code-review covers the next c
   const { run, skill } = setup($, on)
   await skill('code-review')
   expect(await run()).toBeUndefined()
-  expect(await run()).toEqual([note('1a2b3c4', 35)])
 
   await $.tool.call({ tool: 'Agent', description: 'Review', prompt: 'Review the diff', subagent_type: 'feature-dev:code-reviewer' })
   expect(await run()).toBeUndefined()
@@ -39,9 +38,21 @@ test('a review skill, a reviewer agent or a typed /code-review covers the next c
   await $.prompt.submit({ text: '/code-review', wait: false, origin: { kind: 'composer' }, command: { name: 'code-review', args: '' } })
   expect(await run()).toBeUndefined()
 
-  // A skill that is not a review does not count.
+  // The last review was spent, and a skill that is not a review does not count.
   await skill('pdf')
   expect(await run()).toEqual([note('1a2b3c4', 35)])
+})
+
+test('a review after a note answers that note and does not cover the next commit', async ($, on) => {
+  const { run, skill } = setup($, on)
+  expect(await run()).toEqual([note('1a2b3c4', 35)])
+  await skill('code-review')
+  expect(await run()).toEqual([note('1a2b3c4', 35)])
+
+  // Once the note is answered, the next review covers the next commit again.
+  await skill('code-review')
+  await skill('code-review')
+  expect(await run()).toBeUndefined()
 })
 
 test('other commands, quiet commits and subagent commits get no note', async ($, on) => {
@@ -54,11 +65,15 @@ test('other commands, quiet commits and subagent commits get no note', async ($,
   expect(state.toasts).toHaveLength(0)
 })
 
-test('a new session forgets a review', async ($, on) => {
+test('a new session forgets a review and a waiting note', async ($, on) => {
   const { run, skill } = setup($, on)
   await skill('code-review')
   await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
   expect(await run()).toEqual([note('1a2b3c4', 35)])
+
+  await $.session.end({ reason: 'clear', sessionId: 's', resume: { id: 's' } })
+  await skill('code-review')
+  expect(await run()).toBeUndefined()
 })
 
 test('the hash and the line count come from git commit output', () => {
