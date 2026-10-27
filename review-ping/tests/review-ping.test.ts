@@ -12,7 +12,8 @@ function setup(...[$, on]: Parameters<TestBody>) {
   on('ui.toast', (_$, e) => (state.toasts.push(e.text), { value: undefined }))
   on('prompt.submit', (_$, e) => ({ text: e.text }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
-  const run = async (command = 'git commit -m "Add the parser"', agentId?: string) => (await $.tool.call({ tool: 'Bash', command, agentId })).context
+  // agentId is not in every build's Bash input type, but it reaches the hook.
+  const run = async (command = 'git commit -m "Add the parser"', agentId?: string) => (await $.tool.call({ tool: 'Bash', command, agentId } as never)).context
   const skill = (name: string) => $.tool.call({ tool: 'Skill', skill: name })
   return { state, run, skill }
 }
