@@ -1,6 +1,6 @@
 {
   "name": "recall-cue",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Points the model, out of the user's sight, at saved notes whose words match the prompt: auto-memory files and any folders you add",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
