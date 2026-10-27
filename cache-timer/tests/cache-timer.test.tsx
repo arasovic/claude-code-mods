@@ -1,6 +1,6 @@
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
-import { cacheTtl, limitState, statusText } from '../hooks/register'
+import { cacheStatus, cacheTtl, limitState } from '../hooks/register'
 
 const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
 const base = { force5m: false, enable1h: false, subscribed: false, overLimit: false }
@@ -23,11 +23,11 @@ test('only the subscription windows count as a subscription', () => {
 })
 
 test('the status counts down, warns near the end and goes cold', () => {
-  expect(statusText(0, undefined, '5m', 0)).toBeUndefined()
-  expect(statusText(1_000, 0, '1h', 50_000)).toBe('🟢 cache 59:59')
-  expect(statusText(250_000, 0, '5m', 50_000)).toBe('🟡 cache 0:50 · send soon')
-  expect(statusText(300_000, 0, '5m', 182_400)).toBe('🔴 cache cold · next message re-writes 182k tokens')
-  expect(statusText(3_600_001, 0, '1h', 800)).toBe('🔴 cache cold · next message re-writes 800 tokens')
+  expect(cacheStatus(0, undefined, '5m', 0)).toBeUndefined()
+  expect(cacheStatus(1_000, 0, '1h', 50_000)).toEqual({ tone: 'success', value: '59:59' })
+  expect(cacheStatus(250_000, 0, '5m', 50_000)).toEqual({ tone: 'warning', value: '0:50', hint: 'send soon' })
+  expect(cacheStatus(300_000, 0, '5m', 182_400)).toEqual({ tone: 'error', value: 'cold', hint: 'next message re-writes 182k tokens' })
+  expect(cacheStatus(3_600_001, 0, '1h', 800)).toEqual({ tone: 'error', value: 'cold', hint: 'next message re-writes 800 tokens' })
 })
 
 async function reply(...[$, on]: Parameters<TestBody>) {
@@ -62,11 +62,31 @@ test('the band counts down from the last main-thread reply', async ($, on) => {
   const band = await reply($, on)
 
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 4:59')
+  expect(await band()).toBe('● cache 4:59')
   await clock.advance(240_000)
-  expect(await band()).toBe('🟡 cache 0:59 · send soon')
+  expect(await band()).toBe('● cache 0:59 · send soon')
   await clock.advance(60_000)
-  expect(await band()).toBe('🔴 cache cold · next message re-writes 1k tokens')
+  expect(await band()).toBe('● cache cold · next message re-writes 1k tokens')
+})
+
+test('the desktop draws the state as the dot color', async ($, on) => {
+  const clock = mock.clock(on)
+  mock.env(on, { FORCE_PROMPT_CACHING_5M: '1' })
+  mock.store(on)
+  await reply($, on)
+  const dot = async () => {
+    const ui = await $.ui.mount({ plugin: 'cache-timer', surface: 'desktop', component: 'AbovePrompt', requestId: 'band', props: BAND })
+    const color = (await ui.find({ type: 'Text', text: /^●$/ }))?.props.color
+    await ui.unmount()
+    return color
+  }
+
+  await clock.advance(1000)
+  expect(await dot()).toBe('success')
+  await clock.advance(240_000)
+  expect(await dot()).toBe('warning')
+  await clock.advance(60_000)
+  expect(await dot()).toBe('error')
 })
 
 test('a subscription stored by an earlier session gives the first reply an hour', async ($, on) => {
@@ -76,11 +96,11 @@ test('a subscription stored by an earlier session gives the first reply an hour'
   const band = await reply($, on)
 
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 59:59')
+  expect(await band()).toBe('● cache 59:59')
   // Moved to an API key: a response came back with no limits, so the stored subscription is dropped.
   await $.session.measure({ context: { window: 200_000, tokens: 1_010 }, rateLimits: [], changed: ['context'] })
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 4:58')
+  expect(await band()).toBe('● cache 4:58')
 })
 
 test('only a main-thread compaction that ran clears the band', async ($, on) => {
@@ -96,7 +116,7 @@ test('only a main-thread compaction that ran clears the band', async ($, on) => 
   await $.session.compact({ trigger: 'auto', instructions: 'skip', messages })
   await $.session.compact({ trigger: 'precompute', messages })
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 4:58')
+  expect(await band()).toBe('● cache 4:58')
 
   await $.session.compact({ trigger: 'auto', messages })
   await clock.advance(1000)
@@ -113,7 +133,7 @@ test('/compact clears the band even when session.compact never reaches the mod',
 
   await run('model')
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 4:59')
+  expect(await band()).toBe('● cache 4:59')
 
   await run('compact')
   await clock.advance(1000)
@@ -131,7 +151,7 @@ test('skipCompactHook leaves the band to /compact', { options: { skipCompactHook
 
   await $.session.compact({ trigger: 'auto', messages })
   await clock.advance(1000)
-  expect(await band()).toBe('🟢 cache 4:59')
+  expect(await band()).toBe('● cache 4:59')
 
   await $.command.run({ origin: { kind: 'composer' }, presentation: { isFullscreen: false, columns: 80 }, command: 'compact', args: '' })
   await clock.advance(1000)
