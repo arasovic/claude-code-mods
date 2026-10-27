@@ -71,11 +71,16 @@ let typed: { trigger: string; instructions?: string } | undefined
 let polls = 0
 const POLL_MS = 500
 
+// Core's notes, in a block of their own or ahead of a message's text in one string, as a linked session's first prompt has them.
+const NOTES = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>)+\s*/
+
 async function firstText($: EngineInterface) {
   // The rows form keeps what a compaction replaced while the process lives, so only the request's form shows it.
   // Core's own notes can come ahead of the summary, and a compaction sends new ones.
-  const block = (await $.session.messages({ as: 'api' })).flatMap(m => m.content).find(b => b.type === 'text' && typeof b.text === 'string' && !b.text.startsWith('<system-reminder>'))
-  return typeof block?.text === 'string' ? block.text : undefined
+  for (const b of (await $.session.messages({ as: 'api' })).flatMap(m => m.content)) {
+    const text = b.type === 'text' && typeof b.text === 'string' ? b.text.replace(NOTES, '') : ''
+    if (text) return text
+  }
 }
 
 async function check($: EngineInterface) {
