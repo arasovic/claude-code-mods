@@ -8,7 +8,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tested_on-Claude_Code_2.1.296-a8a6ff?style=flat-square" alt="Tested on Claude Code 2.1.296">
+  <a href="https://github.com/arasovic/claude-code-mods/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/arasovic/claude-code-mods/ci.yml?branch=main&label=CI&style=flat-square" alt="CI status"></a>
+  <img src="https://img.shields.io/badge/dynamic/yaml?url=https%3A%2F%2Fraw.githubusercontent.com%2Farasovic%2Fclaude-code-mods%2Fmain%2F.github%2Fworkflows%2Fci.yml&query=%24.env.CLAUDE_CODE_VERSION&label=tested%20on%20Claude%20Code&color=a8a6ff&style=flat-square" alt="Claude Code version CI tests on">
   <img src="https://img.shields.io/badge/license-MIT-3a3a46?style=flat-square" alt="MIT license">
 </p>
 
@@ -181,12 +182,6 @@ Restart Claude Code after installing. Update later with `claude plugin marketpla
 
 Tested on the Claude Code version CI pins (`CLAUDE_CODE_VERSION` in `.github/workflows/ci.yml`). Mods are a recent Claude Code feature, so older versions will not load them. Pictures in show-me and image-peek need a terminal with the kitty graphics protocol, such as Ghostty or kitty. show-me also needs [`mmdc`](https://github.com/mermaid-js/mermaid-cli) on `PATH`, and ci-watch needs [`gh`](https://cli.github.com), logged in.
 
-## Develop
-
-Each mod's README lists its checks. `typecheck.sh` takes the plugin API's types from the installed Claude Code, logged out, lays them in each mod's `.claude-plugin/types/`, then runs `tsc`. Run it with no argument to check every mod.
-
-CI runs on every pull request: `claude plugin test` and `claude plugin validate --strict` for each mod and the marketplace, `typecheck.sh`, a check that a mod changed past its tests and docs has a new version in its `plugin.json`, and a check that no commit message carries a `Co-Authored-By` or tool attribution line. It needs no secrets.
-
 ## License
 
-MIT
+[MIT](LICENSE) © [Mehmet Aras](https://arasmehmet.com)
