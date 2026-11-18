@@ -1,6 +1,6 @@
 import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
-import { fileName, handoff, summaryOf } from '../hooks/register'
+import { compactOrFallback, fileName, handoff, SUMMARY_LEAD, summaryOf } from '../hooks/register'
 
 const msg = (text: string, handle?: string) => ({ role: 'user' as const, text, toolUses: [], handle })
 
@@ -169,4 +169,39 @@ test('skipCompactHook leaves every compaction to the late check', { options: { s
   await s.turn()
   expect(s.writes).toHaveLength(1)
   expect(s.writes[0]).toContain('(auto or plugin)')
+})
+
+test('an empty summarizer reply falls back to a summary asked for in the system prompt', async () => {
+  const asks: { system?: unknown; prompt: unknown; model: string }[] = []
+  let reply = 'Fallback summary.'
+  const $ = {
+    session: { model: async () => 'claude-opus-5-5' },
+    model: { complete: async (r: { system?: unknown; prompt: unknown; model: string }) => (asks.push(r), reply ? { isAnswered: true, text: reply } : { isAnswered: false, reason: 'empty-reply' }) },
+    ui: { toast: () => {} },
+  }
+  let fail = 'Error during compaction: summarization produced empty response'
+  const core = async () => {
+    throw new Error(fail)
+  }
+  const e = { trigger: 'manual' as const, instructions: 'keep the plan', messages: [msg('please summarize nothing', 'h1')] }
+
+  const r = await compactOrFallback($ as never, e, core)
+  expect(r.messages?.[0]?.text).toBe(SUMMARY_LEAD + 'Fallback summary.')
+  expect(asks[0]?.model).toBe('claude-opus-5-5')
+  expect(String(asks[0]?.system)).toContain('keep the plan')
+  expect(String(asks[0]?.prompt)).toContain('please summarize nothing')
+
+  // A fallback that also comes back empty keeps core's error; other errors and precomputes are never caught.
+  reply = ''
+  await expect(compactOrFallback($ as never, e, core)).rejects.toThrow('empty response')
+  await expect(compactOrFallback($ as never, { ...e, trigger: 'precompute' }, core)).rejects.toThrow('empty response')
+  fail = 'prompt too long'
+  reply = 'x'
+  await expect(compactOrFallback($ as never, e, core)).rejects.toThrow('prompt too long')
+  expect(asks).toHaveLength(2)
+
+  // A compaction that works never calls the fallback.
+  const ok = await compactOrFallback($ as never, e, async () => ({ messages: [msg('core summary')] }))
+  expect(ok.messages?.[0]?.text).toBe('core summary')
+  expect(asks).toHaveLength(2)
 })
