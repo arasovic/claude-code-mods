@@ -237,7 +237,7 @@ test('off the terminal a run row cuts its name and keeps the bar and time on its
   on('state.get', (_$, e) => ({ value: { value: e.key === 'watches' ? [watch] : [], version: 1 } }))
   // Beneath the plugin the test stands for the engine's own band.
   on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Box', children: [] }))
-  const props = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 60, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+  const props = { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 60, scroll: { offset: 0, bodyRows: 10 }, view: {} }
   const draw = async (surface: 'terminal' | 'desktop') => {
     const ui = await $.ui.mount({ plugin: 'ci-watch', surface, component: 'AbovePrompt', props })
     const texts = await ui.findAll({ type: 'Text' })

@@ -2,7 +2,7 @@ import { expect, mock, test, type TestBody } from 'claude-code/testing'
 
 import { cacheStatus, cacheTtl, limitState } from '../hooks/register'
 
-const BAND = { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
+const BAND = { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} }
 const base = { force5m: false, enable1h: false, subscribed: false, overLimit: false }
 
 test('the TTL follows the engine order', () => {
