@@ -347,6 +347,18 @@ test('a check that fails after the tool started withholds the output and says th
   expect(r.deny).toContain('It may have run')
 })
 
+test('a check that fails before the tool starts refuses the call and counts it on the status line', async ($, on) => {
+  let ran = false
+  const status: (string | undefined)[] = []
+  on('tool.call', () => (ran = true, { result: 'ran' }))
+  on('ui.status', (_$, e) => (status.push(e.text), { value: undefined }))
+  // A BigInt argument makes the check's JSON.stringify throw before it calls the tool.
+  const r = await $.tool.call({ tool: 'mcp__x__send', n: 1n } as never)
+  expect(r.deny).toContain('refused before it ran')
+  expect(ran).toBe(false)
+  expect(status.at(-1)).toMatch(/\d+ blocked/)
+})
+
 test('a row whose check failed keeps its blocks but not their text', () => {
   type Block = { type: string; [field: string]: unknown }
   const kept: Block[] = [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'ls' } }, { type: 'image', source: { type: 'base64' } }]
