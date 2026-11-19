@@ -1,6 +1,6 @@
 {
   "name": "compact-keeper",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Saves each compaction's summary, with the files edited before it, to ~/.claude/handoffs so the context before /compact can be recovered",
   "author": { "name": "Mehmet Aras", "url": "https://github.com/arasovic" },
   "repository": "https://github.com/arasovic/claude-code-mods",
@@ -11,6 +11,13 @@
       "type": "boolean",
       "title": "Skip the compaction hook",
       "description": "Stops the \"session.compact hook was skipped\" notice by not hooking the compaction itself, the step Claude Code's Security default sends past compact-keeper. Each compaction is then saved after it, as it already is where Security default runs first: no token counts, \"auto or plugin\" for anything but /compact, and an automatic one only at the end of its reply. Two in one reply get one file. On other setups, leave it off.",
+      "required": false,
+      "default": false
+    },
+    "summaryFallback": {
+      "type": "boolean",
+      "title": "Write a fallback summary",
+      "description": "When a compaction, /compact or automatic, fails with \"summarization produced empty response\", asks the session's model for the summary a second time, with the request in the system prompt, and compacts with that. This is one more model request, billed like the first. It cannot run where Security default runs first or with \"Skip the compaction hook\" on.",
       "required": false,
       "default": false
     }
