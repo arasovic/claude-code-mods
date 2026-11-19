@@ -43,11 +43,11 @@ export const handoff = (h: { at: number; cwd: string; sessionId: string; trigger
 }
 
 // ---- fallback summary when core's summarizer comes back empty ----
-// Behind Magpie's Claude relay a compaction can reach a fresh backing run as one pasted block; that run reads the
+// Behind a gateway that relays requests through another run, a compaction can arrive as one pasted block; that run reads the
 // summary ask at its end as part of the paste, carries on the chat instead, and core gets no text. The fallback puts
 // the ask in the system prompt, which the relay passes on as the run's own, and sends the transcript as plain data.
 
-export const EMPTY_SUMMARY = /summari[sz]ation produced empty response|empty[- ]reply|no summary/i
+export const EMPTY_SUMMARY = /summarization produced empty response/i
 
 const cap = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)} [... ${s.length - n} chars cut]` : s)
 
@@ -86,14 +86,15 @@ async function fallbackSummary($: EngineInterface, messages: readonly SessionMes
 }
 
 // Core's compaction, or the fallback's when core's summarizer came back empty; anything else fails as it did.
-export async function compactOrFallback($: EngineInterface, e: SessionCompactInput, next: (e: SessionCompactInput) => Promise<SessionCompactResult>): Promise<SessionCompactResult> {
+// A precompute installs nothing, and a subagent's transcript is not the session model's to summarize.
+export async function compactOrFallback($: EngineInterface, e: SessionCompactInput, next: (e: SessionCompactInput) => Promise<SessionCompactResult>, enabled: boolean): Promise<SessionCompactResult> {
   try {
     return await next(e)
   } catch (err) {
-    if (e.trigger === 'precompute' || !EMPTY_SUMMARY.test(err instanceof Error ? err.message : String(err))) throw err
+    if (!enabled || e.trigger === 'precompute' || e.agentId !== undefined || !EMPTY_SUMMARY.test(err instanceof Error ? err.message : String(err))) throw err
     const summary = await fallbackSummary($, e.messages, e.instructions).catch(() => undefined)
     if (!summary) throw err
-    $.ui.toast('compact-keeper: the summarizer came back empty, so a fallback wrote the summary')
+    $.ui.toast('The summarizer came back empty, so a fallback wrote the summary')
     return { messages: [{ role: 'user', text: SUMMARY_LEAD + summary, toolUses: [] }] }
   }
 }
@@ -177,7 +178,8 @@ export const register: Register = (on, options) => {
   // so the notice stops and the late check below saves every compaction.
   if (options.skipCompactHook !== true) {
     on('session.compact', async ($, e, next) => {
-      const result = await compactOrFallback($, e, next)
+      // Off by default: the fallback is a second model request, billed like the first.
+      const result = await compactOrFallback($, e, next, options.summaryFallback === true)
       // A precompute may never be installed, and a subagent's compaction is not the conversation's.
       if (result.skip !== undefined || e.trigger === 'precompute' || e.agentId !== undefined) return result
       handled = true

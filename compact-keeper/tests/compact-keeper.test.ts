@@ -185,23 +185,26 @@ test('an empty summarizer reply falls back to a summary asked for in the system 
   }
   const e = { trigger: 'manual' as const, instructions: 'keep the plan', messages: [msg('please summarize nothing', 'h1')] }
 
-  const r = await compactOrFallback($ as never, e, core)
+  const r = await compactOrFallback($ as never, e, core, true)
   expect(r.messages?.[0]?.text).toBe(SUMMARY_LEAD + 'Fallback summary.')
   expect(asks[0]?.model).toBe('claude-opus-5-5')
   expect(String(asks[0]?.system)).toContain('keep the plan')
   expect(String(asks[0]?.prompt)).toContain('please summarize nothing')
 
-  // A fallback that also comes back empty keeps core's error; other errors and precomputes are never caught.
+  // A fallback that also comes back empty keeps core's error; other errors, precomputes, subagents and a fallback left off are never caught.
   reply = ''
-  await expect(compactOrFallback($ as never, e, core)).rejects.toThrow('empty response')
-  await expect(compactOrFallback($ as never, { ...e, trigger: 'precompute' }, core)).rejects.toThrow('empty response')
+  await expect(compactOrFallback($ as never, e, core, true)).rejects.toThrow('empty response')
+  await expect(compactOrFallback($ as never, { ...e, trigger: 'precompute' }, core, true)).rejects.toThrow('empty response')
+  reply = 'x'
+  await expect(compactOrFallback($ as never, { ...e, agentId: 'sub' }, core, true)).rejects.toThrow('empty response')
+  await expect(compactOrFallback($ as never, e, core, false)).rejects.toThrow('empty response')
   fail = 'prompt too long'
   reply = 'x'
-  await expect(compactOrFallback($ as never, e, core)).rejects.toThrow('prompt too long')
+  await expect(compactOrFallback($ as never, e, core, true)).rejects.toThrow('prompt too long')
   expect(asks).toHaveLength(2)
 
   // A compaction that works never calls the fallback.
-  const ok = await compactOrFallback($ as never, e, async () => ({ messages: [msg('core summary')] }))
+  const ok = await compactOrFallback($ as never, e, async () => ({ messages: [msg('core summary')] }), true)
   expect(ok.messages?.[0]?.text).toBe('core summary')
   expect(asks).toHaveLength(2)
 })
