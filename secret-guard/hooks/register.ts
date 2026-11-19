@@ -472,7 +472,7 @@ export const register: Register = (on, options) => {
     // A failed hook is skipped, so the tool would run, or its raw result would stand. Refuse in both cases: replaying `next`
     // here would hand back the unscrubbed result. The handler has one second, so it does nothing else.
     tally.blocked++
-    if (next.error.kind !== 're-entry') show($)
+    show($)
     // Once `next` was called the tool may have run (a push, a write), and a refusal undoes nothing, so the model must not
     // read it as "did not run".
     return next.called
