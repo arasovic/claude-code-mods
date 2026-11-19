@@ -45,12 +45,13 @@ const engine = (on: On) => {
     flags.dropWrite = false
     return { value: { isSet: true as const, version: (e.ifVersion ?? 0) + 1 } }
   })
+  // The mod reads only each agent's id and type.
   on('agent.list', () => ({
     value: [
       { id: 'a1', type: 'general-purpose', description: 'look around', status: 'running' as const },
       { id: 'a2', type: 'general-purpose', description: 'look elsewhere', status: 'running' as const },
     ],
-  }))
+  }) as never)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', (_$, e) => ({ text: e.answer }))
   on('tool.call', async () => {
